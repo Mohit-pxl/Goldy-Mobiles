@@ -48,10 +48,7 @@ const sendOTP = [
       const code = generateOTPCode();
       const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
-      // FOR LOCAL TESTING: Print the code to the console
-      console.log(`\n===========================================`);
-      console.log(`[DEVELOPMENT] OTP for ${email}: ${code}`);
-      console.log(`===========================================\n`);
+
 
       await OTP.create({ email, code, expiresAt });
 
@@ -65,21 +62,13 @@ const sendOTP = [
       try {
         await sendOTPEmail(email, code);
       } catch (emailErr) {
-        console.error('Failed to send OTP email via SMTP:', emailErr.message);
-        console.log('You can still use the code printed above to log in.');
-
-        if (process.env.NODE_ENV === 'production') {
-          await OTP.deleteMany({ email });
-          return errorResponse(
-            res,
-            'Could not send verification email. Please contact support.',
-            502
-          );
-        }
-
-        responsePayload.delivery = 'dev-fallback';
-        responsePayload.message = 'Email delivery failed. Use the development code shown below.';
-        responsePayload.devCode = code;
+        console.error('Failed to send OTP email:', emailErr.message);
+        await OTP.deleteMany({ email });
+        return errorResponse(
+          res,
+          'Could not send verification email. Please contact support.',
+          502
+        );
       }
 
       return successResponse(res, responsePayload);

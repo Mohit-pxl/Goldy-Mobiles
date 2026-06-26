@@ -36,7 +36,7 @@ function AuthGuard() {
     const inCustomer = segments[0] === "(tabs)";
 
     if (!user && !isGuest) {
-      if (!inAuth) router.replace("/(auth)/login");
+      if (!inAuth) router.replace("/(auth)");
     } else if (user?.role === "staff" || user?.role === "admin") {
       if (inAuth || inCustomer) router.replace("/(staff)");
     } else {
