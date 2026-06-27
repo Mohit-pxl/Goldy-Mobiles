@@ -249,23 +249,40 @@ const deleteProduct = async (req, res, next) => {
 
 /**
  * GET /api/products/barcode/:code
- * Lookup product by exact barcode match.
+ * Lookup product by exact barcode match or IMEI/Serial match.
  */
 const getProductByBarcode = async (req, res, next) => {
   try {
     const { code } = req.params;
-    const product = await Product.findOne({ barcode: code })
+    
+    // First, check if it's a product barcode
+    let product = await Product.findOne({ barcode: code })
       .populate('categoryId', 'name slug');
+      
+    let identifierItem = null;
+
+    // If not found, check if it's an IMEI or Serial Number
+    if (!product) {
+      const ProductItem = require('../models/ProductItem');
+      identifierItem = await ProductItem.findOne({ code, status: 'IN_STOCK' });
+      if (identifierItem) {
+        product = await Product.findById(identifierItem.productId)
+          .populate('categoryId', 'name slug');
+      }
+    }
 
     if (!product) {
       return errorResponse(
         res,
-        `No product found with barcode "${code}". You can add it as a new product.`,
+        `No product or available item found with code "${code}". You can add it as a new product.`,
         404
       );
     }
 
     const productObj = product.toObject();
+    if (identifierItem) {
+      productObj.foundIdentifier = identifierItem.toObject();
+    }
 
     // Strip costPrice if user doesn't have permission
     const canViewCost =

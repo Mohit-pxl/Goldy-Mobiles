@@ -35,9 +35,9 @@ export default function BillingScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const params = useLocalSearchParams<{ scannedProductId?: string; mode?: string }>();
+  const params = useLocalSearchParams<{ scannedProductId?: string; scannedIdentifier?: string; scanTimestamp?: string; mode?: string }>();
   const isQuotationMode = params.mode === "quotation";
-  const { items, addItem, updateQty, clearCart, subtotal, gstAmount, total } = useCart();
+  const { items, addItem, updateQty, removeIdentifier, clearCart, subtotal, gstAmount, total } = useCart();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Product[]>([]);
@@ -55,17 +55,21 @@ export default function BillingScreen() {
     },
   });
 
-  const prevScannedId = useRef<string | undefined>(undefined);
+  const prevScanTime = useRef<string | undefined>(undefined);
 
   /* ── Handle scanned product returned from camera screen ── */
   useEffect(() => {
+    const stime = params.scanTimestamp;
     const sid = params.scannedProductId;
-    if (!sid || sid === prevScannedId.current) return;
-    prevScannedId.current = sid;
+    if (!sid || !stime || stime === prevScanTime.current) return;
+    prevScanTime.current = stime;
     apiGet<Product>(`/products/${sid}`)
-      .then((r) => { addItem(r.data); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); })
+      .then((r) => { 
+        addItem(r.data, params.scannedIdentifier); 
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); 
+      })
       .catch(() => Alert.alert("Error", "Could not load scanned product."));
-  }, [params.scannedProductId]);
+  }, [params.scanTimestamp, params.scannedProductId, params.scannedIdentifier, addItem]);
 
   const fmt = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 
@@ -89,8 +93,8 @@ export default function BillingScreen() {
   const handleBarcodeSearch = async () => {
     if (!barcodeText.trim()) return;
     try {
-      const res = await apiGet<Product>(`/products/barcode/${barcodeText.trim()}`);
-      addItem(res.data);
+      const res = await apiGet<Product & { foundIdentifier?: { code: string } }>(`/products/barcode/${barcodeText.trim()}`);
+      addItem(res.data, res.data.foundIdentifier?.code);
       setBarcodeText("");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
@@ -136,7 +140,12 @@ export default function BillingScreen() {
         router.replace(`/staff/quotation/${res.data._id}`);
       } else {
         const res = await apiPost<{ _id: string }>("/billing/invoices", {
-          items: items.map((i) => ({ productId: i.product._id, qty: i.qty, price: i.product.sellingPrice })),
+          items: items.map((i) => ({ 
+            productId: i.product._id, 
+            qty: i.qty, 
+            price: i.product.sellingPrice,
+            identifiers: i.identifiers
+          })),
           paymentMode: paymentStatus === "unpaid" ? "credit" : paymentMode,
           paymentStatus,
           ...(customer ? { customerId: customer._id } : {}),
@@ -284,43 +293,62 @@ export default function BillingScreen() {
         ) : (
           <View style={[styles.cartBox, { borderColor: colors.border }]}>
             {items.map((item, idx) => (
-              <View
-                key={item.product._id}
-                style={[
-                  styles.cartRow,
-                  {
-                    borderBottomColor: colors.border,
-                    borderBottomWidth: idx < items.length - 1 ? 1 : 0,
-                  },
-                ]}
-              >
-                  <View style={[styles.cartThumb, { backgroundColor: colors.bg4 }]}>
-                    <Ionicons name="cube-outline" size={16} color={colors.text2} />
+              <View key={item.product._id} style={{ borderBottomColor: colors.border, borderBottomWidth: idx < items.length - 1 ? 1 : 0 }}>
+                <View style={[styles.cartRow]}>
+                    <View style={[styles.cartThumb, { backgroundColor: colors.bg4 }]}>
+                      <Ionicons name="cube-outline" size={16} color={colors.text2} />
+                    </View>
+                    <View style={styles.cartInfo}>
+                      <Text style={[styles.cartName, { color: colors.foreground }]} numberOfLines={1}>
+                        {item.product.name}
+                      </Text>
+                      <Text style={[styles.cartSub, { color: colors.text3 }]}>
+                        {fmt(item.product.sellingPrice)} × {item.qty}
+                        {item.qty > 1 ? ` = ${fmt(item.product.sellingPrice * item.qty)}` : ""}
+                      </Text>
+                    </View>
+                  <View style={styles.qtyRow}>
+                    <Pressable
+                      style={[styles.qtyBtn, { borderColor: colors.border2 }]}
+                      onPress={() => updateQty(item.product._id, item.qty - 1)}
+                    >
+                      <Ionicons name="remove" size={14} color={colors.text2} />
+                    </Pressable>
+                    <Text style={[styles.qtyText, { color: colors.foreground }]}>{item.qty}</Text>
+                    <Pressable
+                      style={[styles.qtyBtn, { borderColor: colors.border2 }]}
+                      onPress={() => updateQty(item.product._id, item.qty + 1)}
+                    >
+                      <Ionicons name="add" size={14} color={colors.text2} />
+                    </Pressable>
                   </View>
-                  <View style={styles.cartInfo}>
-                    <Text style={[styles.cartName, { color: colors.foreground }]} numberOfLines={1}>
-                      {item.product.name}
-                    </Text>
-                    <Text style={[styles.cartSub, { color: colors.text3 }]}>
-                      {fmt(item.product.sellingPrice)} × {item.qty}
-                      {item.qty > 1 ? ` = ${fmt(item.product.sellingPrice * item.qty)}` : ""}
-                    </Text>
-                  </View>
-                <View style={styles.qtyRow}>
-                  <Pressable
-                    style={[styles.qtyBtn, { borderColor: colors.border2 }]}
-                    onPress={() => updateQty(item.product._id, item.qty - 1)}
-                  >
-                    <Ionicons name="remove" size={14} color={colors.text2} />
-                  </Pressable>
-                  <Text style={[styles.qtyText, { color: colors.foreground }]}>{item.qty}</Text>
-                  <Pressable
-                    style={[styles.qtyBtn, { borderColor: colors.border2 }]}
-                    onPress={() => updateQty(item.product._id, item.qty + 1)}
-                  >
-                    <Ionicons name="add" size={14} color={colors.text2} />
-                  </Pressable>
                 </View>
+                
+                {/* Identifiers List */}
+                {(item.product.trackImei || item.product.trackSerial) && (
+                  <View style={{ paddingHorizontal: 12, paddingBottom: 12, gap: 4 }}>
+                    {item.identifiers && item.identifiers.map(id => (
+                      <View key={id} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bg3, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start', gap: 6 }}>
+                        <Ionicons name="barcode-outline" size={12} color={colors.text2} />
+                        <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: colors.foreground }}>{id}</Text>
+                        <Pressable onPress={() => removeIdentifier(item.product._id, id)} hitSlop={6}>
+                           <Ionicons name="close" size={14} color={colors.redText} />
+                        </Pressable>
+                      </View>
+                    ))}
+                    {(!item.identifiers || item.identifiers.length < item.qty) && (
+                      <Pressable 
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}
+                        onPress={() => router.push({ pathname: "/staff/barcode-scanner", params: { returnMode: "barcode", returnPath: "/(staff)/billing", productId: item.product._id, expectedCategory: item.product.trackImei ? "IMEI" : "Serial" } })}
+                      >
+                         <Ionicons name="scan" size={14} color={colors.primary} />
+                         <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: colors.primary }}>
+                           Scan {item.qty - (item.identifiers?.length || 0)} more {item.product.trackImei ? "IMEI" : "Serial"}
+                         </Text>
+                      </Pressable>
+                    )}
+                  </View>
+                )}
               </View>
             ))}
           </View>

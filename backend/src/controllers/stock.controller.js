@@ -15,6 +15,7 @@ const createMovement = [
     .withMessage('type must be in, out, or adjustment'),
   body('qty').isInt({ min: 1 }).withMessage('quantity must be a positive integer'),
   body('note').optional().trim(),
+  body('identifiers').optional().isArray().withMessage('Identifiers must be an array'),
 
   async (req, res, next) => {
     try {
@@ -23,7 +24,40 @@ const createMovement = [
         return errorResponse(res, 'Validation failed.', 400, errors.array());
       }
 
-      const { productId, type, qty, note } = req.body;
+      const { productId, type, qty, note, identifiers } = req.body;
+      const Product = require('../models/Product');
+      const ProductItem = require('../models/ProductItem');
+
+      const product = await Product.findById(productId);
+      if (!product) return errorResponse(res, 'Product not found.', 404);
+
+      if ((product.trackImei || product.trackSerial) && type === 'in') {
+        if (!identifiers || identifiers.length !== qty) {
+          return errorResponse(res, `This product requires exactly ${qty} ${product.trackImei ? 'IMEIs' : 'Serial Numbers'}.`, 400);
+        }
+        
+        // Ensure uniqueness before adding
+        const existingItems = await ProductItem.find({ code: { $in: identifiers } });
+        if (existingItems.length > 0) {
+          const dups = existingItems.map(i => i.code).join(', ');
+          return errorResponse(res, `Identifiers already exist in system: ${dups}`, 400);
+        }
+        
+        const itemsToInsert = identifiers.map(code => ({
+          productId,
+          code,
+          type: product.trackImei ? 'IMEI' : 'SERIAL',
+          status: 'IN_STOCK',
+          addedBy: req.user._id
+        }));
+        await ProductItem.insertMany(itemsToInsert);
+      } else if ((product.trackImei || product.trackSerial) && type === 'out') {
+        // Need to mark out specifically... this will be tricky for manual out, maybe limit it or require specific identifiers.
+        // For now, if manual out, we might require identifiers, but let's just do it for 'in' as requested by the Add Stock screen.
+        if (identifiers && identifiers.length === qty) {
+          await ProductItem.updateMany({ code: { $in: identifiers } }, { $set: { status: 'RETURNED' } });
+        }
+      }
 
       const movement = await createStockMovement({
         productId,

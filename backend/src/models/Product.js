@@ -75,6 +75,14 @@ const productSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    trackImei: {
+      type: Boolean,
+      default: false,
+    },
+    trackSerial: {
+      type: Boolean,
+      default: false,
+    },
     isActive: {
       type: Boolean,
       default: true,

@@ -187,6 +187,9 @@ export default function AddProductScreen() {
         finalBarcode = `GM${Date.now().toString().slice(-8)}`;
       }
 
+      const isMobile = form.category === "Mobiles";
+      const isSerialDevice = ["Laptops", "Smart Watches", "Tablets"].includes(form.category);
+
       const payload = {
         name: form.name.trim(),
         brand: form.brand.trim(),
@@ -203,6 +206,8 @@ export default function AddProductScreen() {
         description: form.description || undefined,
         specifications: specs.filter((s) => s.key && s.value),
         images: images,
+        trackImei: isMobile,
+        trackSerial: isSerialDevice,
       };
 
       if (isEdit) {
@@ -301,7 +306,7 @@ export default function AddProductScreen() {
               />
               <Pressable
                 style={[styles.autoBtn, { backgroundColor: colors.bg4, borderColor: colors.border2 }]}
-                onPress={() => router.push({ pathname: "/staff/barcode-scanner", params: { returnMode: "barcode", returnPath: "/staff/add-product", productId: id || "" } })}
+                onPress={() => router.push({ pathname: "/staff/barcode-scanner", params: { returnMode: "barcode", returnPath: "/staff/add-product", productId: id || "", expectedCategory: "EAN/UPC" } })}
               >
                 <Ionicons name="scan" size={16} color={colors.primary} />
               </Pressable>

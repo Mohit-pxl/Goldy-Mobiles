@@ -89,6 +89,31 @@ const createInvoice = [
         totalCgst += lineCgst;
         totalSgst += lineSgst;
 
+        // Handle identifiers
+        const ProductItem = require('../models/ProductItem');
+        if (product.trackImei || product.trackSerial) {
+          if (!item.identifiers || item.identifiers.length !== item.qty) {
+            throw Object.assign(
+              new Error(`Missing or incorrect number of identifiers for "${product.name}". Expected ${item.qty}.`),
+              { statusCode: 400 }
+            );
+          }
+          
+          // Verify they exist and are in stock
+          const existingItems = await ProductItem.find({
+            code: { $in: item.identifiers },
+            productId: product._id,
+            status: 'IN_STOCK'
+          });
+          
+          if (existingItems.length !== item.qty) {
+            throw Object.assign(
+              new Error(`Some identifiers for "${product.name}" are invalid or not in stock.`),
+              { statusCode: 400 }
+            );
+          }
+        }
+
         invoiceItems.push({
           productId: product._id,
           name: product.name,
@@ -96,6 +121,7 @@ const createInvoice = [
           price,
           gstPercent,
           total: lineTotal + lineGst,
+          identifiers: item.identifiers || [],
         });
 
         // Decrement stock
@@ -148,6 +174,16 @@ const createInvoice = [
           },
         ]
       );
+
+      // Update ProductItems to SOLD and set invoiceId
+      const allIdentifiers = invoiceItems.flatMap(i => i.identifiers);
+      if (allIdentifiers.length > 0) {
+        const ProductItem = require('../models/ProductItem');
+        await ProductItem.updateMany(
+          { code: { $in: allIdentifiers } },
+          { $set: { status: 'SOLD', invoiceId: invoice._id } }
+        );
+      }
 
       // Update StockMovement records with the invoice reference
       await StockMovement.updateMany(
