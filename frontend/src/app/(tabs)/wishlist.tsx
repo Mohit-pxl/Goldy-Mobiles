@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import EmptyState from "@/components/EmptyState";
 import { useWishlist } from "@/context/WishlistContext";
+import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -18,6 +19,7 @@ export default function WishlistScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { items, removeItem } = useWishlist();
+  const { user } = useAuth();
 
   const handleEnquireAll = async () => {
     if (items.length === 0) return;
@@ -52,6 +54,27 @@ export default function WishlistScreen() {
   };
 
   const fmt = (n: number) => `₹${n.toLocaleString("en-IN")}`;
+
+  if (!user) {
+    return (
+      <View style={[styles.root, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { paddingTop: insets.top + 12, borderBottomColor: colors.border }]}>
+          <Text style={[styles.title, { color: colors.foreground }]}>Wishlist</Text>
+        </View>
+        <View style={styles.guestCenter}>
+          <Ionicons name="heart-circle-outline" size={64} color={colors.text3} />
+          <Text style={[styles.guestTitle, { color: colors.text2 }]}>Not signed in</Text>
+          <Text style={[styles.guestSub, { color: colors.text3 }]}>Sign in to save and manage your favorite products</Text>
+          <Pressable
+            style={[styles.signInBtn, { backgroundColor: colors.primary }]}
+            onPress={() => router.push("/(auth)")}
+          >
+            <Text style={{ fontFamily: "Inter_700Bold", color: "#000", fontSize: 14 }}>Sign In</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -121,6 +144,10 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 20, fontWeight: "700", fontFamily: "Inter_700Bold" },
   count: { fontSize: 13, fontFamily: "Inter_400Regular" },
+  guestCenter: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 32 },
+  guestTitle: { fontSize: 18, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
+  guestSub: { fontSize: 13, textAlign: "center", lineHeight: 18, fontFamily: "Inter_400Regular" },
+  signInBtn: { paddingVertical: 13, paddingHorizontal: 32, borderRadius: 10, marginTop: 8 },
   row: {
     flexDirection: "row",
     alignItems: "center",
