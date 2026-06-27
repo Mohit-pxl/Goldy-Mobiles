@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import { SkeletonRow } from "@/components/Skeleton";
 import { useColors } from "@/hooks/useColors";
-import { apiGet, apiPatch, apiPost, StaffUser } from "@/services/api";
+import { apiGet, apiPatch, apiPost, apiDelete, StaffUser } from "@/services/api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function StaffMgmtScreen() {
@@ -16,7 +16,10 @@ export default function StaffMgmtScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const qc = useQueryClient();
+  
   const [showModal, setShowModal] = useState(false);
+  const [modalMode, setModalMode] = useState<"invite" | "edit">("invite");
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", email: "", role: "staff" as "staff" | "admin" });
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
@@ -29,13 +32,36 @@ export default function StaffMgmtScreen() {
 
   const addMutation = useMutation({
     mutationFn: async () => {
-      if (!form.name.trim() || !form.email.trim()) throw new Error("Name and email are required.");
-      await apiPost("/staff", { name: form.name.trim(), email: form.email.trim().toLowerCase(), role: form.role });
+      if (!form.email.trim()) throw new Error("Email is required.");
+      await apiPost("/staff", { email: form.email.trim().toLowerCase(), role: form.role });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["staff"] });
       setShowModal(false);
-      setForm({ name: "", email: "", role: "staff" });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (e: Error) => Alert.alert("Error", e.message),
+  });
+
+  const editMutation = useMutation({
+    mutationFn: async () => {
+      if (!form.email.trim() || !form.name.trim()) throw new Error("Name and Email are required.");
+      await apiPatch(`/staff/${editingId}`, { name: form.name.trim(), email: form.email.trim().toLowerCase(), role: form.role });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["staff"] });
+      setShowModal(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (e: Error) => Alert.alert("Error", e.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiDelete(`/staff/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["staff"] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
     onError: (e: Error) => Alert.alert("Error", e.message),
@@ -59,14 +85,42 @@ export default function StaffMgmtScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
+  const openInvite = () => {
+    setModalMode("invite");
+    setForm({ name: "", email: "", role: "staff" });
+    setShowModal(true);
+  };
+
+  const openEdit = (s: StaffUser) => {
+    setModalMode("edit");
+    setEditingId(s._id);
+    setForm({ name: s.name || "", email: s.email || "", role: s.role });
+    setShowModal(true);
+  };
+
+  const handleDelete = (id: string) => {
+    Alert.alert("Delete Staff", "Are you sure you want to delete this staff member?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => deleteMutation.mutate(id) }
+    ]);
+  };
+
+  const handleSave = () => {
+    if (modalMode === "invite") {
+      addMutation.mutate();
+    } else {
+      editMutation.mutate();
+    }
+  };
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 12, borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => router.canGoBack() ? router.canGoBack() ? router.back() : router.replace('/') : router.replace('/')} hitSlop={8}>
+        <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace('/')} hitSlop={8}>
           <Ionicons name="arrow-back" size={22} color={colors.text2} />
         </Pressable>
         <Text style={[styles.title, { color: colors.foreground }]}>Staff</Text>
-        <Pressable style={[styles.addBtn, { backgroundColor: colors.primary }]} onPress={() => setShowModal(true)}>
+        <Pressable style={[styles.addBtn, { backgroundColor: colors.primary }]} onPress={openInvite}>
           <Ionicons name="add" size={16} color="#000" />
           <Text style={styles.addBtnText}>Invite</Text>
         </Pressable>
@@ -88,7 +142,7 @@ export default function StaffMgmtScreen() {
             <View style={[styles.staffCard, { backgroundColor: colors.bg2, borderColor: colors.border }]}>
               <View style={styles.staffHeader}>
                 <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-                  <Text style={styles.avatarText}>{s.name[0].toUpperCase()}</Text>
+                  <Text style={styles.avatarText}>{s.name[0]?.toUpperCase() || 'S'}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.staffName, { color: colors.foreground }]}>{s.name}</Text>
@@ -96,6 +150,14 @@ export default function StaffMgmtScreen() {
                 </View>
                 <View style={[styles.roleBadge, { backgroundColor: s.role === "admin" ? colors.amberBg : colors.bg3 }]}>
                   <Text style={[styles.roleText, { color: s.role === "admin" ? colors.amberText : colors.text2 }]}>{s.role}</Text>
+                </View>
+                <View style={{ flexDirection: "row", gap: 6 }}>
+                  <Pressable onPress={() => openEdit(s)} hitSlop={8} style={{ padding: 4 }}>
+                    <Ionicons name="pencil" size={18} color={colors.primary} />
+                  </Pressable>
+                  <Pressable onPress={() => handleDelete(s._id)} hitSlop={8} style={{ padding: 4 }}>
+                    <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                  </Pressable>
                 </View>
               </View>
               <View style={[styles.permsSection, { borderTopColor: colors.border }]}>
@@ -109,7 +171,7 @@ export default function StaffMgmtScreen() {
                   <View key={key} style={styles.permRow}>
                     <Text style={[styles.permLabel, { color: colors.text2 }]}>{label}</Text>
                     <Switch
-                      value={s.permissions[key]}
+                      value={s.permissions?.[key] || false}
                       onValueChange={(v) => togglePerm(s, key, v)}
                       trackColor={{ false: colors.bg4, true: colors.primary }}
                       thumbColor="#fff"
@@ -127,12 +189,14 @@ export default function StaffMgmtScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalBox, { backgroundColor: colors.bg2, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Invite Staff</Text>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>{modalMode === "invite" ? "Invite Staff" : "Edit Staff"}</Text>
               <Pressable onPress={() => setShowModal(false)} hitSlop={8}>
                 <Ionicons name="close" size={22} color={colors.text2} />
               </Pressable>
             </View>
-            <TextInput style={[styles.formInput, { color: colors.foreground, backgroundColor: colors.bg3, borderColor: colors.border }]} placeholder="Full name" placeholderTextColor={colors.text3} value={form.name} onChangeText={(v) => setForm((p) => ({ ...p, name: v }))} />
+            {modalMode === "edit" && (
+              <TextInput style={[styles.formInput, { color: colors.foreground, backgroundColor: colors.bg3, borderColor: colors.border }]} placeholder="Full name" placeholderTextColor={colors.text3} value={form.name} onChangeText={(v) => setForm((p) => ({ ...p, name: v }))} />
+            )}
             <TextInput style={[styles.formInput, { color: colors.foreground, backgroundColor: colors.bg3, borderColor: colors.border }]} placeholder="Email address" placeholderTextColor={colors.text3} keyboardType="email-address" autoCapitalize="none" value={form.email} onChangeText={(v) => setForm((p) => ({ ...p, email: v }))} />
             <View style={styles.roleRow}>
               {(["staff", "admin"] as const).map((r) => (
@@ -141,8 +205,8 @@ export default function StaffMgmtScreen() {
                 </Pressable>
               ))}
             </View>
-            <Pressable style={[styles.submitBtn, { backgroundColor: colors.primary, opacity: addMutation.isPending ? 0.7 : 1 }]} onPress={() => addMutation.mutate()} disabled={addMutation.isPending}>
-              {addMutation.isPending ? <ActivityIndicator color="#000" size="small" /> : <Text style={styles.submitText}>Send invitation</Text>}
+            <Pressable style={[styles.submitBtn, { backgroundColor: colors.primary, opacity: addMutation.isPending || editMutation.isPending ? 0.7 : 1 }]} onPress={handleSave} disabled={addMutation.isPending || editMutation.isPending}>
+              {addMutation.isPending || editMutation.isPending ? <ActivityIndicator color="#000" size="small" /> : <Text style={styles.submitText}>{modalMode === "invite" ? "Send invitation" : "Save changes"}</Text>}
             </Pressable>
           </View>
         </View>

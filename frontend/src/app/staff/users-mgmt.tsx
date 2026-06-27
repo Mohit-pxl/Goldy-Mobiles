@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyState from "@/components/EmptyState";
 import { SkeletonRow } from "@/components/Skeleton";
 import { useColors } from "@/hooks/useColors";
-import { apiGet, apiPost, apiPatch, apiDelete, User } from "@/services/api";
+import { apiGet, apiPatch, apiDelete, User } from "@/services/api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function UsersMgmtScreen() {
@@ -54,18 +54,6 @@ export default function UsersMgmtScreen() {
     },
   });
 
-  const addMutation = useMutation({
-    mutationFn: async (payload: typeof form) => {
-      if (!payload.name.trim()) throw new Error("Name is required.");
-      await apiPost("/users", payload);
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["users"] });
-      setShowModal(false);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    },
-    onError: (e: Error) => Alert.alert("Error", e.message),
-  });
 
   const editMutation = useMutation({
     mutationFn: async ({ id, payload }: { id: string, payload: typeof form }) => {
@@ -93,18 +81,17 @@ export default function UsersMgmtScreen() {
 
   const executeSave = () => {
     if (editingId) editMutation.mutate({ id: editingId, payload: form });
-    else addMutation.mutate(form);
   };
 
   const handleSave = () => {
     if (Platform.OS === "web") {
-      if (window.confirm(`Are you sure you want to ${editingId ? "update" : "add"} this user?`)) {
+      if (window.confirm(`Are you sure you want to update this user?`)) {
         executeSave();
       }
     } else {
       Alert.alert(
         "Confirm Action",
-        `Are you sure you want to ${editingId ? "update" : "add"} this user?`,
+        `Are you sure you want to update this user?`,
         [
           { text: "Cancel", style: "cancel" },
           { text: "Yes, Confirm", onPress: executeSave }
@@ -130,11 +117,6 @@ export default function UsersMgmtScreen() {
     }
   };
 
-  const openAdd = () => {
-    setEditingId(null);
-    setForm({ name: "", email: "", phone: "", role: "customer" });
-    setShowModal(true);
-  };
 
   const openEdit = (u: User) => {
     setEditingId(u._id);
@@ -181,10 +163,6 @@ export default function UsersMgmtScreen() {
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
           <Pressable onPress={() => setShowFilters(!showFilters)} hitSlop={8}>
             <Ionicons name="filter-outline" size={22} color={showFilters ? colors.primary : colors.text2} />
-          </Pressable>
-          <Pressable style={[styles.addBtn, { backgroundColor: colors.primary }]} onPress={openAdd}>
-            <Ionicons name="add" size={16} color="#000" />
-            <Text style={styles.addBtnText}>Add User</Text>
           </Pressable>
         </View>
       </View>
@@ -279,7 +257,7 @@ export default function UsersMgmtScreen() {
           {Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} />)}
         </View>
       ) : filteredUsers.length === 0 ? (
-        <EmptyState icon="people-outline" title="No users found" subtitle="Try adjusting your filters or add a new user." />
+        <EmptyState icon="people-outline" title="No users found" subtitle="Try adjusting your filters." />
       ) : (
         <FlatList
           data={filteredUsers}
@@ -330,7 +308,7 @@ export default function UsersMgmtScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalBox, { backgroundColor: colors.bg2, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.foreground }]}>{editingId ? "Edit User" : "Add User"}</Text>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Edit User</Text>
               <Pressable onPress={() => setShowModal(false)} hitSlop={8}>
                 <Ionicons name="close" size={22} color={colors.text2} />
               </Pressable>
@@ -363,11 +341,11 @@ export default function UsersMgmtScreen() {
             </View>
 
             <Pressable 
-              style={[styles.submitBtn, { backgroundColor: colors.primary, opacity: (addMutation.isPending || editMutation.isPending) ? 0.7 : 1 }]} 
+              style={[styles.submitBtn, { backgroundColor: colors.primary, opacity: editMutation.isPending ? 0.7 : 1 }]} 
               onPress={handleSave} 
-              disabled={addMutation.isPending || editMutation.isPending}
+              disabled={editMutation.isPending}
             >
-              {(addMutation.isPending || editMutation.isPending) ? <ActivityIndicator color="#000" size="small" /> : <Text style={styles.submitText}>Save User</Text>}
+              {editMutation.isPending ? <ActivityIndicator color="#000" size="small" /> : <Text style={styles.submitText}>Save User</Text>}
             </Pressable>
           </View>
         </View>
@@ -380,8 +358,6 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1 },
   title: { fontSize: 18, fontWeight: "700", fontFamily: "Inter_700Bold" },
-  addBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
-  addBtnText: { color: "#000", fontWeight: "700", fontFamily: "Inter_700Bold", fontSize: 13 },
   
   filterContainer: { padding: 16, borderBottomWidth: 1 },
   filterLabel: { fontSize: 11, fontFamily: "Inter_500Medium", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 },
