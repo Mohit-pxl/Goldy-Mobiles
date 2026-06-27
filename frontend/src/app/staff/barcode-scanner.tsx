@@ -20,7 +20,7 @@ export default function BarcodeScannerScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { returnMode } = useLocalSearchParams<{ returnMode?: string }>();
+  const { returnMode, returnPath, productId } = useLocalSearchParams<{ returnMode?: string, returnPath?: string, productId?: string }>();
   const isRawMode = returnMode === "barcode";
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -45,8 +45,14 @@ export default function BarcodeScannerScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     if (isRawMode) {
-      router.canGoBack() ? router.canGoBack() ? router.back() : router.replace('/') : router.replace('/');
-      router.setParams({ scannedBarcode: data });
+      if (returnPath) {
+        const params: any = { scannedBarcode: data };
+        if (productId) params.id = productId;
+        router.navigate({ pathname: returnPath as any, params });
+      } else {
+        router.canGoBack() ? router.canGoBack() ? router.back() : router.replace('/') : router.replace('/');
+        setTimeout(() => router.setParams({ scannedBarcode: data }), 10);
+      }
       return;
     }
 

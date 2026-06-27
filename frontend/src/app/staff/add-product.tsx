@@ -28,6 +28,36 @@ const GST_RATES = [0, 5, 12, 18, 28];
 
 interface Spec { key: string; value: string }
 
+const Label = ({ text, required }: { text: string; required?: boolean }) => {
+  const colors = useColors();
+  return (
+    <Text style={[styles.label, { color: colors.text3 }]}>
+      {text}{required && " *"}
+    </Text>
+  );
+};
+
+const Field = ({ label: lbl, value, onChange, placeholder, keyboardType = "default", required = false, editable = true }: {
+  label: string; value: string; onChange: (t: string) => void; placeholder?: string;
+  keyboardType?: "default" | "numeric" | "decimal-pad"; required?: boolean; editable?: boolean;
+}) => {
+  const colors = useColors();
+  return (
+    <View style={styles.fieldGroup}>
+      <Label text={lbl} required={required} />
+      <TextInput
+        style={[styles.input, { color: editable ? colors.foreground : colors.text3, backgroundColor: colors.bg3, borderColor: colors.border }]}
+        value={value}
+        onChangeText={onChange}
+        placeholder={placeholder || lbl}
+        placeholderTextColor={colors.text3}
+        keyboardType={keyboardType}
+        editable={editable}
+      />
+    </View>
+  );
+};
+
 export default function AddProductScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -189,30 +219,6 @@ export default function AddProductScreen() {
     }
   };
 
-  const Label = ({ text, required }: { text: string; required?: boolean }) => (
-    <Text style={[styles.label, { color: colors.text3 }]}>
-      {text}{required && " *"}
-    </Text>
-  );
-
-  const Field = ({ label: lbl, value, onChange, placeholder, keyboardType = "default", required = false, editable = true }: {
-    label: string; value: string; onChange: (t: string) => void; placeholder?: string;
-    keyboardType?: "default" | "numeric" | "decimal-pad"; required?: boolean; editable?: boolean;
-  }) => (
-    <View style={styles.fieldGroup}>
-      <Label text={lbl} required={required} />
-      <TextInput
-        style={[styles.input, { color: editable ? colors.foreground : colors.text3, backgroundColor: colors.bg3, borderColor: colors.border }]}
-        value={value}
-        onChangeText={onChange}
-        placeholder={placeholder || lbl}
-        placeholderTextColor={colors.text3}
-        keyboardType={keyboardType}
-        editable={editable}
-      />
-    </View>
-  );
-
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <View style={[styles.root, { backgroundColor: colors.background, paddingTop: insets.top }]}>
@@ -295,7 +301,7 @@ export default function AddProductScreen() {
               />
               <Pressable
                 style={[styles.autoBtn, { backgroundColor: colors.bg4, borderColor: colors.border2 }]}
-                onPress={() => router.push("/staff/barcode-scanner?returnMode=barcode")}
+                onPress={() => router.push({ pathname: "/staff/barcode-scanner", params: { returnMode: "barcode", returnPath: "/staff/add-product", productId: id || "" } })}
               >
                 <Ionicons name="scan" size={16} color={colors.primary} />
               </Pressable>
