@@ -81,8 +81,13 @@ router.use('/settings', settingsRoutes);
 router.use('/wishlist', wishlistRoutes);
 
 // Alias for frontend staff requests
-const { listStaff } = require('../controllers/user.controller');
-router.get('/staff', authenticate, requireRole(['admin']), listStaff);
+// Alias for frontend staff requests
+const { listStaff, inviteStaff, updateUserRole, updateUser, removeStaff } = require('../controllers/user.controller');
+router.get('/staff', authenticate, requireRole(['staff', 'admin']), listStaff);
+router.post('/staff', authenticate, requireRole(['staff', 'admin']), inviteStaff);
+router.patch('/staff/:id', authenticate, requireRole(['staff', 'admin']), updateUser);
+router.delete('/staff/:id', authenticate, requireRole(['staff', 'admin']), removeStaff);
+router.patch('/staff/:id/permissions', authenticate, requireRole(['staff', 'admin']), updateUserRole);
 
 /**
  * @swagger
