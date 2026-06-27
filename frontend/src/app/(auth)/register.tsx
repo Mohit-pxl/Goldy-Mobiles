@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -33,7 +33,12 @@ export default function RegisterScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { register } = useAuth();
+  const { register, sendOtp } = useAuth();
+
+  type Step = "FORM" | "OTP";
+  const [step, setStep] = useState<Step>("FORM");
+  const [otp, setOtp] = useState("");
+  const otpInputRef = useRef<TextInput>(null);
 
   const [form, setForm] = useState({
     name: "",
@@ -44,6 +49,8 @@ export default function RegisterScreen() {
   });
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [backendPhoneError, setBackendPhoneError] = useState("");
+  const [backendEmailError, setBackendEmailError] = useState("");
 
   const getError = (schema: z.ZodType, value: string) => {
     const res = schema.safeParse(value);
@@ -55,6 +62,9 @@ export default function RegisterScreen() {
   const phoneError = (submitted || form.phone.length > 0) ? getError(phoneSchema, form.phone) : "";
   const emailError = (submitted || form.email.length > 0) ? getError(emailSchema, form.email) : "";
   const passwordError = (submitted || form.password.length > 0) ? getError(passwordSchema, form.password) : "";
+  
+  const displayPhoneError = backendPhoneError || phoneError;
+  const displayEmailError = backendEmailError || emailError;
   const confirmPasswordError = (submitted || form.confirmPassword.length > 0) && form.password !== form.confirmPassword 
     ? "Passwords do not match" : "";
 
@@ -77,15 +87,35 @@ export default function RegisterScreen() {
 
     setLoading(true);
     try {
+      await sendOtp(form.email.trim().toLowerCase(), "register", form.phone.trim());
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setStep("OTP");
+    } catch (e: any) {
+      const msg = e.message || "Failed to send OTP.";
+      if (msg.toLowerCase().includes("phone")) {
+        setBackendPhoneError(msg);
+      } else if (msg.toLowerCase().includes("email")) {
+        setBackendEmailError(msg);
+      } else {
+        Alert.alert("Error", msg);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (otp.length < 6) return;
+    setLoading(true);
+    try {
       await register({
         name: form.name.trim(),
         phone: form.phone.trim(),
         email: form.email.trim().toLowerCase(),
-        password: form.password
+        password: form.password,
+        otp
       });
-      
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // AuthGuard will handle navigation to root
     } catch (e: unknown) {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to create account. Please try again.");
     } finally {
@@ -105,7 +135,8 @@ export default function RegisterScreen() {
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <View style={styles.form}>
+          {step === "FORM" && (
+            <View style={styles.form}>
             
             <Text style={[styles.label, { color: colors.text2 }]}>Full Name</Text>
             <View style={[
@@ -117,8 +148,6 @@ export default function RegisterScreen() {
                 style={[styles.input, { color: colors.foreground }]}
                 placeholder="John Doe"
                 placeholderTextColor={colors.text3}
-                cursorColor={colors.primary}
-                selectionColor={colors.primary}
                 value={form.name}
                 onChangeText={(v) => {
                   setForm(prev => ({ ...prev, name: v }));
@@ -131,50 +160,48 @@ export default function RegisterScreen() {
             <Text style={[styles.label, { color: colors.text2, marginTop: 8 }]}>Mobile Number</Text>
             <View style={[
               styles.inputRow, 
-              { backgroundColor: colors.bg3, borderColor: phoneError ? "#EF4444" : colors.border2 }
+              { backgroundColor: colors.bg3, borderColor: displayPhoneError ? "#EF4444" : colors.border2 }
             ]}>
-              <Ionicons name="call-outline" size={18} color={phoneError ? "#EF4444" : colors.text3} />
+              <Ionicons name="call-outline" size={18} color={displayPhoneError ? "#EF4444" : colors.text3} />
               <Text style={{ color: colors.text2, fontFamily: "Inter_500Medium", fontSize: 14 }}>+91</Text>
               <TextInput
                 style={[styles.input, { color: colors.foreground }]}
                 placeholder="9876543210"
                 placeholderTextColor={colors.text3}
-                cursorColor={colors.primary}
-                selectionColor={colors.primary}
                 keyboardType="phone-pad"
                 maxLength={10}
                 value={form.phone}
                 onChangeText={(v) => {
                   setForm(prev => ({ ...prev, phone: v.replace(/\D/g, "") }));
+                  if (backendPhoneError) setBackendPhoneError("");
                   if (submitted) setSubmitted(false);
                 }}
               />
             </View>
-            {!!phoneError && <Text style={[styles.errorText, { color: "#EF4444" }]}>{phoneError}</Text>}
+            {!!displayPhoneError && <Text style={[styles.errorText, { color: "#EF4444" }]}>{displayPhoneError}</Text>}
 
             <Text style={[styles.label, { color: colors.text2, marginTop: 8 }]}>Email Address</Text>
             <View style={[
               styles.inputRow, 
-              { backgroundColor: colors.bg3, borderColor: emailError ? "#EF4444" : colors.border2 }
+              { backgroundColor: colors.bg3, borderColor: displayEmailError ? "#EF4444" : colors.border2 }
             ]}>
-              <Ionicons name="mail-outline" size={18} color={emailError ? "#EF4444" : colors.text3} />
+              <Ionicons name="mail-outline" size={18} color={displayEmailError ? "#EF4444" : colors.text3} />
               <TextInput
                 style={[styles.input, { color: colors.foreground }]}
                 placeholder="you@example.com"
                 placeholderTextColor={colors.text3}
-                cursorColor={colors.primary}
-                selectionColor={colors.primary}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
                 value={form.email}
                 onChangeText={(v) => {
                   setForm(prev => ({ ...prev, email: v }));
+                  if (backendEmailError) setBackendEmailError("");
                   if (submitted) setSubmitted(false);
                 }}
               />
             </View>
-            {!!emailError && <Text style={[styles.errorText, { color: "#EF4444" }]}>{emailError}</Text>}
+            {!!displayEmailError && <Text style={[styles.errorText, { color: "#EF4444" }]}>{displayEmailError}</Text>}
 
             <Text style={[styles.label, { color: colors.text2, marginTop: 8 }]}>Password</Text>
             <View style={[
@@ -228,6 +255,50 @@ export default function RegisterScreen() {
               )}
             </Pressable>
           </View>
+          )}
+
+          {step === "OTP" && (
+            <View style={styles.form}>
+              <Text style={[styles.instruction, { color: colors.text2 }]}>
+                Enter the 6-digit OTP sent to {form.email}.
+              </Text>
+              
+              <Pressable onPress={() => otpInputRef.current?.focus()} style={styles.otpContainer}>
+                <TextInput
+                  ref={otpInputRef}
+                  style={styles.hiddenInput}
+                  value={otp}
+                  onChangeText={(t) => setOtp(t.replace(/\D/g, "").slice(0, 6))}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  autoFocus
+                />
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.otpBox,
+                      { backgroundColor: colors.bg3, borderColor: i < otp.length ? colors.primary : colors.border2 },
+                    ]}
+                  >
+                    <Text style={[styles.otpChar, { color: colors.foreground }]}>{otp[i] || ""}</Text>
+                  </View>
+                ))}
+              </Pressable>
+
+              <Pressable
+                style={[styles.btnPrimary, { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1, marginTop: 16 }]}
+                onPress={handleVerifyOtp}
+                disabled={loading || otp.length < 6}
+              >
+                {loading ? <ActivityIndicator color="#000" /> : <Text style={[styles.btnText, { color: colors.primaryForeground }]}>Verify & Create Account</Text>}
+              </Pressable>
+              
+              <Pressable onPress={handleRegister} disabled={loading} style={{ alignItems: "center", marginTop: 16 }}>
+                <Text style={[styles.resend, { color: colors.text2 }]}>Resend OTP</Text>
+              </Pressable>
+            </View>
+          )}
         </ScrollView>
       </View>
     </KeyboardAvoidingView>
@@ -270,5 +341,18 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     marginTop: -6,
     marginBottom: 2,
-  }
+  },
+  instruction: { fontSize: 14, fontFamily: "Inter_400Regular", marginBottom: 16, lineHeight: 20 },
+  otpContainer: { flexDirection: "row", gap: 8, marginVertical: 8, justifyContent: "center" },
+  hiddenInput: { position: "absolute", opacity: 0, width: 0 },
+  otpBox: {
+    width: 44,
+    height: 52,
+    borderWidth: 1.5,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  otpChar: { fontSize: 22, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  resend: { fontSize: 13, fontFamily: "Inter_500Medium", textDecorationLine: "underline" },
 });

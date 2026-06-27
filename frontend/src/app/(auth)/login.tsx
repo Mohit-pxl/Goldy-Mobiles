@@ -92,8 +92,6 @@ export default function LoginScreen() {
                 style={[styles.input, { color: colors.foreground }]}
                 placeholder="you@example.com"
                 placeholderTextColor={colors.text3}
-                cursorColor={colors.primary}
-                selectionColor={colors.primary}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -118,8 +116,6 @@ export default function LoginScreen() {
                 style={[styles.input, { color: colors.foreground }]}
                 placeholder="Enter your password"
                 placeholderTextColor={colors.text3}
-                cursorColor={colors.primary}
-                selectionColor={colors.primary}
                 secureTextEntry
                 value={password}
                 onChangeText={(text) => {

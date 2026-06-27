@@ -19,6 +19,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { apiPost } from "@/services/api";
 import { useAuth } from "@/context/AuthContext";
+import { z } from "zod";
+
+const emailSchema = z.string().email("Please enter a valid email address").endsWith("@gmail.com", "Email must end with @gmail.com");
+const passwordSchema = z.string()
+  .min(8, "Password must be at least 8 characters, include uppercase, lowercase & special character")
+  .regex(/[A-Z]/, "Password must be at least 8 characters, include uppercase, lowercase & special character")
+  .regex(/[a-z]/, "Password must be at least 8 characters, include uppercase, lowercase & special character")
+  .regex(/[!@#$%^&*(),.?":{}|<>]/, "Password must be at least 8 characters, include uppercase, lowercase & special character");
 
 type Step = "EMAIL" | "OTP" | "NEW_PASSWORD" | "SUCCESS";
 
@@ -34,8 +42,20 @@ export default function ForgotPasswordScreen() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [submittedEmail, setSubmittedEmail] = useState(false);
+  const [submittedPassword, setSubmittedPassword] = useState(false);
 
   const otpInputRef = useRef<TextInput>(null);
+
+  const getError = (schema: z.ZodType, value: string) => {
+    const res = schema.safeParse(value);
+    return res.success ? "" : res.error.issues[0].message;
+  };
+
+  const emailError = (submittedEmail || email.length > 0) ? getError(emailSchema, email) : "";
+  const passwordError = (submittedPassword || password.length > 0) ? getError(passwordSchema, password) : "";
+  const confirmPasswordError = (submittedPassword || confirmPassword.length > 0) && password !== confirmPassword 
+    ? "Passwords do not match" : "";
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -46,13 +66,14 @@ export default function ForgotPasswordScreen() {
   };
 
   const handleSendOtp = async () => {
-    if (!email.trim() || !email.includes("@")) {
-      Alert.alert("Invalid email", "Please enter a valid email address.");
+    setSubmittedEmail(true);
+    if (emailError || !email) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
     setLoading(true);
     try {
-      await sendOtp(email.trim().toLowerCase());
+      await sendOtp(email.trim().toLowerCase(), 'forgot-password');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setStep("OTP");
     } catch (e: any) {
@@ -75,8 +96,9 @@ export default function ForgotPasswordScreen() {
   };
 
   const handleUpdatePassword = async () => {
-    if (!password || password !== confirmPassword) {
-      Alert.alert("Error", "Passwords do not match or are empty.");
+    setSubmittedPassword(true);
+    if (passwordError || confirmPasswordError || !password || !confirmPassword) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
     setLoading(true);
@@ -114,21 +136,23 @@ export default function ForgotPasswordScreen() {
                 Enter your email address to receive an OTP for password reset.
               </Text>
               <Text style={[styles.label, { color: colors.text2 }]}>Email Address</Text>
-              <View style={[styles.inputRow, { backgroundColor: colors.bg3, borderColor: colors.border2 }]}>
-                <Ionicons name="mail-outline" size={18} color={colors.text3} />
+              <View style={[styles.inputRow, { backgroundColor: colors.bg3, borderColor: emailError ? "#EF4444" : colors.border2 }]}>
+                <Ionicons name="mail-outline" size={18} color={emailError ? "#EF4444" : colors.text3} />
                 <TextInput
                   style={[styles.input, { color: colors.foreground }]}
                   placeholder="you@example.com"
                   placeholderTextColor={colors.text3}
-                  cursorColor={colors.primary}
-                  selectionColor={colors.primary}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={(v) => {
+                    setEmail(v);
+                    if (submittedEmail) setSubmittedEmail(false);
+                  }}
                 />
               </View>
+              {!!emailError && <Text style={[styles.errorText, { color: "#EF4444" }]}>{emailError}</Text>}
               <Pressable
                 style={[styles.btnPrimary, { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1, marginTop: 16 }]}
                 onPress={handleSendOtp}
@@ -152,8 +176,6 @@ export default function ForgotPasswordScreen() {
                   value={otp}
                   onChangeText={(t) => setOtp(t.replace(/\D/g, "").slice(0, 6))}
                   keyboardType="number-pad"
-                  cursorColor={colors.primary}
-                  selectionColor={colors.primary}
                   maxLength={6}
                   autoFocus
                 />
@@ -191,34 +213,38 @@ export default function ForgotPasswordScreen() {
               </Text>
 
               <Text style={[styles.label, { color: colors.text2 }]}>New Password</Text>
-              <View style={[styles.inputRow, { backgroundColor: colors.bg3, borderColor: colors.border2 }]}>
-                <Ionicons name="lock-closed-outline" size={18} color={colors.text3} />
+              <View style={[styles.inputRow, { backgroundColor: colors.bg3, borderColor: passwordError ? "#EF4444" : colors.border2 }]}>
+                <Ionicons name="lock-closed-outline" size={18} color={passwordError ? "#EF4444" : colors.text3} />
                 <TextInput
                   style={[styles.input, { color: colors.foreground }]}
                   placeholder="Enter new password"
                   placeholderTextColor={colors.text3}
-                  cursorColor={colors.primary}
-                  selectionColor={colors.primary}
                   secureTextEntry
                   value={password}
-                  onChangeText={setPassword}
+                  onChangeText={(v) => {
+                    setPassword(v);
+                    if (submittedPassword) setSubmittedPassword(false);
+                  }}
                 />
               </View>
+              {!!passwordError && <Text style={[styles.errorText, { color: "#EF4444" }]}>{passwordError}</Text>}
 
               <Text style={[styles.label, { color: colors.text2, marginTop: 8 }]}>Confirm Password</Text>
-              <View style={[styles.inputRow, { backgroundColor: colors.bg3, borderColor: colors.border2 }]}>
-                <Ionicons name="lock-closed-outline" size={18} color={colors.text3} />
+              <View style={[styles.inputRow, { backgroundColor: colors.bg3, borderColor: confirmPasswordError ? "#EF4444" : colors.border2 }]}>
+                <Ionicons name="lock-closed-outline" size={18} color={confirmPasswordError ? "#EF4444" : colors.text3} />
                 <TextInput
                   style={[styles.input, { color: colors.foreground }]}
                   placeholder="Repeat new password"
                   placeholderTextColor={colors.text3}
-                  cursorColor={colors.primary}
-                  selectionColor={colors.primary}
                   secureTextEntry
                   value={confirmPassword}
-                  onChangeText={setConfirmPassword}
+                  onChangeText={(v) => {
+                    setConfirmPassword(v);
+                    if (submittedPassword) setSubmittedPassword(false);
+                  }}
                 />
               </View>
+              {!!confirmPasswordError && <Text style={[styles.errorText, { color: "#EF4444" }]}>{confirmPasswordError}</Text>}
 
               <Pressable
                 style={[styles.btnPrimary, { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1, marginTop: 16 }]}
@@ -286,6 +312,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   btnText: { fontSize: 15, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  errorText: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    marginTop: -6,
+    marginBottom: 2,
+  },
   otpContainer: { flexDirection: "row", gap: 8, marginVertical: 8, justifyContent: "center" },
   hiddenInput: { position: "absolute", opacity: 0, width: 0 },
   otpBox: {

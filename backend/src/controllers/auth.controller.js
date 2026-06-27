@@ -25,12 +25,24 @@ const sendOTP = [
         return errorResponse(res, 'Validation failed.', 400, errors.array());
       }
 
-      const { email } = req.body;
+      const { email, type, phone } = req.body;
 
-      // Check if user exists before sending OTP
-      const user = await User.findOne({ email });
-      if (!user) {
-        return errorResponse(res, 'User not found.', 404);
+      if (type === 'register') {
+        const userByEmail = await User.findOne({ email });
+        if (userByEmail) {
+          return errorResponse(res, 'Email already in use.', 400);
+        }
+        if (phone) {
+          const userByPhone = await User.findOne({ phone });
+          if (userByPhone) {
+            return errorResponse(res, 'Phone number already in use.', 400);
+          }
+        }
+      } else if (type === 'forgot-password') {
+        const user = await User.findOne({ email });
+        if (!user) {
+          return errorResponse(res, 'User not found.', 404);
+        }
       }
 
       // Check if there's a recent OTP that hasn't expired (rate limiting)
@@ -248,6 +260,7 @@ const register = [
   body('phone').optional().trim(),
   body('email').isEmail().withMessage('Valid email is required').normalizeEmail(),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  body('otp').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits').isNumeric(),
 
   async (req, res, next) => {
     try {
@@ -256,12 +269,34 @@ const register = [
         return errorResponse(res, 'Validation failed.', 400, errors.array());
       }
 
-      const { name, phone, email, password } = req.body;
+      const { name, phone, email, password, otp } = req.body;
 
       let user = await User.findOne({ email });
       if (user) {
         return errorResponse(res, 'Email already in use.', 400);
       }
+
+      // Verify OTP
+      const otpRecord = await OTP.findOne({ email });
+      if (!otpRecord) {
+        return errorResponse(res, 'No verification code found. Please request a new one.', 400);
+      }
+      if (otpRecord.expiresAt < new Date()) {
+        await OTP.deleteMany({ email });
+        return errorResponse(res, 'Verification code has expired. Please request a new one.', 400);
+      }
+      if (otpRecord.attempts >= MAX_OTP_ATTEMPTS) {
+        await OTP.deleteMany({ email });
+        return errorResponse(res, 'Too many incorrect attempts. Please request a new code.', 429);
+      }
+      if (otpRecord.code !== otp) {
+        otpRecord.attempts += 1;
+        await otpRecord.save();
+        const remaining = MAX_OTP_ATTEMPTS - otpRecord.attempts;
+        return errorResponse(res, `Incorrect code. ${remaining} attempts remaining.`, 400);
+      }
+
+      await OTP.deleteMany({ email });
 
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
