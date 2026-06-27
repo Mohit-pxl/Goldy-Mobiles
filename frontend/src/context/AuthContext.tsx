@@ -9,7 +9,7 @@ interface AuthContextType {
   user: User | null;
   isGuest: boolean;
   isLoading: boolean;
-  sendOtp: (email: string) => Promise<void>;
+  sendOtp: (email: string, type?: "register" | "forgot-password", phone?: string) => Promise<void>;
   verifyOtp: (email: string, otp: string) => Promise<void>;
   login: (email: string, pass: string) => Promise<void>;
   register: (data: any) => Promise<void>;
@@ -45,8 +45,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loadUser();
   }, [loadUser]);
 
-  const sendOtp = useCallback(async (email: string) => {
-    await apiPost<{ message: string }>("/auth/send-otp", { email });
+  const sendOtp = useCallback(async (email: string, type?: "register" | "forgot-password", phone?: string) => {
+    await apiPost<{ message: string }>("/auth/send-otp", { email, type, phone });
   }, []);
 
   const verifyOtp = useCallback(async (email: string, otp: string) => {
