@@ -120,6 +120,8 @@ export default function ForgotPasswordScreen() {
                   style={[styles.input, { color: colors.foreground }]}
                   placeholder="you@example.com"
                   placeholderTextColor={colors.text3}
+                  cursorColor={colors.primary}
+                  selectionColor={colors.primary}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -150,6 +152,8 @@ export default function ForgotPasswordScreen() {
                   value={otp}
                   onChangeText={(t) => setOtp(t.replace(/\D/g, "").slice(0, 6))}
                   keyboardType="number-pad"
+                  cursorColor={colors.primary}
+                  selectionColor={colors.primary}
                   maxLength={6}
                   autoFocus
                 />
@@ -193,6 +197,8 @@ export default function ForgotPasswordScreen() {
                   style={[styles.input, { color: colors.foreground }]}
                   placeholder="Enter new password"
                   placeholderTextColor={colors.text3}
+                  cursorColor={colors.primary}
+                  selectionColor={colors.primary}
                   secureTextEntry
                   value={password}
                   onChangeText={setPassword}
@@ -206,6 +212,8 @@ export default function ForgotPasswordScreen() {
                   style={[styles.input, { color: colors.foreground }]}
                   placeholder="Repeat new password"
                   placeholderTextColor={colors.text3}
+                  cursorColor={colors.primary}
+                  selectionColor={colors.primary}
                   secureTextEntry
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}

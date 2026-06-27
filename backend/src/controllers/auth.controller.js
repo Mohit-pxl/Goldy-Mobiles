@@ -27,6 +27,12 @@ const sendOTP = [
 
       const { email } = req.body;
 
+      // Check if user exists before sending OTP
+      const user = await User.findOne({ email });
+      if (!user) {
+        return errorResponse(res, 'User not found.', 404);
+      }
+
       // Check if there's a recent OTP that hasn't expired (rate limiting)
       const recentOTP = await OTP.findOne({ email }).sort({ createdAt: -1 });
       if (recentOTP) {

@@ -17,6 +17,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { z } from "zod";
+
+const emailSchema = z.string().email("Please enter a valid email address").endsWith("@gmail.com", "Email must end with @gmail.com");
+const passwordSchema = z.string().min(1, "Please enter your password");
 
 export default function LoginScreen() {
   const colors = useColors();
@@ -27,6 +31,15 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  const getError = (schema: z.ZodType, value: string) => {
+    const res = schema.safeParse(value);
+    return res.success ? "" : res.error.issues[0].message;
+  };
+
+  const emailError = (submitted || email.length > 0) ? getError(emailSchema, email) : "";
+  const passwordError = (submitted || password.length > 0) ? getError(passwordSchema, password) : "";
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -37,12 +50,9 @@ export default function LoginScreen() {
   };
 
   const handleLogin = async () => {
-    if (!email.trim() || !email.includes("@")) {
-      Alert.alert("Invalid email", "Please enter a valid email address.");
-      return;
-    }
-    if (!password) {
-      Alert.alert("Missing password", "Please enter your password.");
+    setSubmitted(true);
+    if (getError(emailSchema, email) || getError(passwordSchema, password)) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
 
@@ -73,34 +83,56 @@ export default function LoginScreen() {
         <View style={styles.center}>
           <View style={styles.form}>
             <Text style={[styles.label, { color: colors.text2 }]}>Email Address</Text>
-            <View style={[styles.inputRow, { backgroundColor: colors.bg3, borderColor: colors.border2 }]}>
-              <Ionicons name="mail-outline" size={18} color={colors.text3} />
+            <View style={[
+              styles.inputRow, 
+              { backgroundColor: colors.bg3, borderColor: emailError ? "#EF4444" : colors.border2 }
+            ]}>
+              <Ionicons name="mail-outline" size={18} color={emailError ? "#EF4444" : colors.text3} />
               <TextInput
                 style={[styles.input, { color: colors.foreground }]}
                 placeholder="you@example.com"
                 placeholderTextColor={colors.text3}
+                cursorColor={colors.primary}
+                selectionColor={colors.primary}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  if (submitted) setSubmitted(false);
+                }}
               />
             </View>
+            {!!emailError && (
+              <Text style={[styles.errorText, { color: "#EF4444" }]}>{emailError}</Text>
+            )}
 
             <Text style={[styles.label, { color: colors.text2, marginTop: 8 }]}>Password</Text>
-            <View style={[styles.inputRow, { backgroundColor: colors.bg3, borderColor: colors.border2 }]}>
-              <Ionicons name="lock-closed-outline" size={18} color={colors.text3} />
+            <View style={[
+              styles.inputRow, 
+              { backgroundColor: colors.bg3, borderColor: passwordError ? "#EF4444" : colors.border2 }
+            ]}>
+              <Ionicons name="lock-closed-outline" size={18} color={passwordError ? "#EF4444" : colors.text3} />
               <TextInput
                 style={[styles.input, { color: colors.foreground }]}
                 placeholder="Enter your password"
                 placeholderTextColor={colors.text3}
+                cursorColor={colors.primary}
+                selectionColor={colors.primary}
                 secureTextEntry
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(text) => {
+                  setPassword(text);
+                  if (submitted) setSubmitted(false);
+                }}
                 onSubmitEditing={handleLogin}
                 returnKeyType="done"
               />
             </View>
+            {!!passwordError && (
+              <Text style={[styles.errorText, { color: "#EF4444" }]}>{passwordError}</Text>
+            )}
 
             <Pressable
               style={{ alignSelf: "flex-end", paddingVertical: 8 }}
@@ -160,4 +192,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   btnText: { fontSize: 15, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  errorText: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    marginTop: -8,
+    marginBottom: 4,
+  }
 });
