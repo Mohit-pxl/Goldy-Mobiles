@@ -241,14 +241,24 @@ const inviteStaff = [
 
       const { email, role } = req.body;
 
-      const existingUser = await User.findOne({ email });
-      if (existingUser) {
-        return errorResponse(res, 'Email already in use.', 400);
+      let user = await User.findOne({ email });
+      if (user) {
+        user.role = role;
+        if (!user.permissions) {
+          user.permissions = {
+            canViewCostPrice: false,
+            canEditPrice: false,
+            canViewReports: false,
+            canManageStaff: false,
+          };
+        }
+        await user.save();
+        return successResponse(res, user, 200);
       }
 
       const name = email.split('@')[0];
 
-      const user = await User.create({
+      user = await User.create({
         email,
         name,
         role,
@@ -267,4 +277,46 @@ const inviteStaff = [
   },
 ];
 
-module.exports = { listUsers, listStaff, updateUserRole, deactivateUser, updateUser, deleteUser, inviteStaff };
+/**
+ * DELETE /api/staff/:id
+ * Remove staff role from a user (downgrade to customer).
+ */
+const removeStaff = [
+  param('id').isMongoId().withMessage('Invalid user ID'),
+
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return errorResponse(res, 'Validation failed.', 400, errors.array());
+      }
+
+      const { id } = req.params;
+
+      if (id === req.user._id.toString()) {
+        return errorResponse(res, 'Cannot remove your own staff role.', 400);
+      }
+
+      const user = await User.findById(id);
+      if (!user) {
+        return errorResponse(res, 'User not found.', 404);
+      }
+
+      user.role = 'customer';
+      user.permissions = {
+        canViewCostPrice: false,
+        canEditPrice: false,
+        canViewReports: false,
+        canManageStaff: false,
+      };
+
+      await user.save();
+
+      return successResponse(res, { message: 'Staff role removed successfully.' });
+    } catch (error) {
+      next(error);
+    }
+  },
+];
+
+module.exports = { listUsers, listStaff, updateUserRole, deactivateUser, updateUser, deleteUser, inviteStaff, removeStaff };
