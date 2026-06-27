@@ -79,8 +79,10 @@ router.use('/banners', bannerRoutes);
 router.use('/settings', settingsRoutes);
 
 // Alias for frontend staff requests
-const { listStaff } = require('../controllers/user.controller');
-router.get('/staff', authenticate, requireRole(['admin']), listStaff);
+const { listStaff, inviteStaff, updateUserRole } = require('../controllers/user.controller');
+router.get('/staff', authenticate, requireRole(['staff', 'admin']), listStaff);
+router.post('/staff', authenticate, requireRole(['staff', 'admin']), inviteStaff);
+router.patch('/staff/:id/permissions', authenticate, requireRole(['staff', 'admin']), updateUserRole);
 
 /**
  * @swagger

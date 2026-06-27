@@ -17,7 +17,7 @@ export default function StaffMgmtScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", role: "staff" as "staff" | "admin" });
+  const [form, setForm] = useState({ email: "", role: "staff" as "staff" | "admin" });
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["staff"],
@@ -29,13 +29,13 @@ export default function StaffMgmtScreen() {
 
   const addMutation = useMutation({
     mutationFn: async () => {
-      if (!form.name.trim() || !form.email.trim()) throw new Error("Name and email are required.");
-      await apiPost("/staff", { name: form.name.trim(), email: form.email.trim().toLowerCase(), role: form.role });
+      if (!form.email.trim()) throw new Error("Email is required.");
+      await apiPost("/staff", { email: form.email.trim().toLowerCase(), role: form.role });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["staff"] });
       setShowModal(false);
-      setForm({ name: "", email: "", role: "staff" });
+      setForm({ email: "", role: "staff" });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
     onError: (e: Error) => Alert.alert("Error", e.message),
@@ -132,7 +132,6 @@ export default function StaffMgmtScreen() {
                 <Ionicons name="close" size={22} color={colors.text2} />
               </Pressable>
             </View>
-            <TextInput style={[styles.formInput, { color: colors.foreground, backgroundColor: colors.bg3, borderColor: colors.border }]} placeholder="Full name" placeholderTextColor={colors.text3} value={form.name} onChangeText={(v) => setForm((p) => ({ ...p, name: v }))} />
             <TextInput style={[styles.formInput, { color: colors.foreground, backgroundColor: colors.bg3, borderColor: colors.border }]} placeholder="Email address" placeholderTextColor={colors.text3} keyboardType="email-address" autoCapitalize="none" value={form.email} onChangeText={(v) => setForm((p) => ({ ...p, email: v }))} />
             <View style={styles.roleRow}>
               {(["staff", "admin"] as const).map((r) => (
