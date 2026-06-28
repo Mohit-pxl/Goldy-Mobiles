@@ -71,7 +71,7 @@ export default function CategoryProductsScreen() {
     if (activeBrands.length > 0 && !activeBrands.includes(p.brand)) return false;
     if (minPrice && p.sellingPrice < Number(minPrice)) return false;
     if (maxPrice && p.sellingPrice > Number(maxPrice)) return false;
-    if (searchQuery && !p.name.toLowerCase().includes(searchQuery.toLowerCase()) && !p.brand.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (searchQuery && !(p.name || "").toLowerCase().includes(searchQuery.toLowerCase()) && !(p.brand || "").toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
 

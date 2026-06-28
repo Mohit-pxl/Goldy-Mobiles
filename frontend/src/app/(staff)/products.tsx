@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import EmptyState from "@/components/EmptyState";
 import ProductListRow from "@/components/ProductListRow";
+import RadialMenu, { RadialOption } from "@/components/RadialMenu";
 import { SkeletonRow } from "@/components/Skeleton";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
@@ -38,7 +39,7 @@ export default function StaffProductsScreen() {
   });
 
   const products = (data || []).filter(
-    (p) => !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.brand.toLowerCase().includes(search.toLowerCase())
+    (p) => !search || (p.name || "").toLowerCase().includes(search.toLowerCase()) || (p.brand || "").toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -47,45 +48,13 @@ export default function StaffProductsScreen() {
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.foreground }]}>Products</Text>
           <View style={styles.headerActions}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.stockBtn,
-                { backgroundColor: colors.bg3, borderColor: colors.border2, opacity: pressed ? 0.8 : 1 }
+            <RadialMenu
+              options={[
+                { id: "stock", label: "Stock", icon: "cube", color: colors.primary, onSelect: () => router.push("/staff/add-stock" as any) },
+                { id: "remove", label: "Remove", icon: "trash", color: colors.destructive, onSelect: () => router.push("/staff/remove-product") },
+                { id: "add", label: "Add", icon: "add", color: colors.primary, onSelect: () => router.push("/staff/add-product") },
               ]}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push("/staff/add-stock" as any);
-              }}
-            >
-              <Ionicons name="cube-outline" size={15} color={colors.primary} />
-              <Text style={[styles.stockBtnText, { color: colors.primary }]}>Stock</Text>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [
-                styles.fab,
-                { backgroundColor: colors.destructive, opacity: pressed ? 0.8 : 1, marginRight: 8 }
-              ]}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push("/staff/remove-product");
-              }}
-            >
-              <Ionicons name="trash" size={16} color="#fff" />
-              <Text style={[styles.fabText, { color: "#fff" }]}>Remove</Text>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [
-                styles.fab,
-                { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }
-              ]}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push("/staff/add-product");
-              }}
-            >
-              <Ionicons name="add" size={16} color="#000" />
-              <Text style={styles.fabText}>Add</Text>
-            </Pressable>
+            />
           </View>
         </View>
 

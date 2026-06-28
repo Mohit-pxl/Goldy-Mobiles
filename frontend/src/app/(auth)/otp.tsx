@@ -29,7 +29,7 @@ export default function OtpScreen() {
 
   const handleBack = () => {
     if (router.canGoBack()) {
-      router.back();
+      router.canGoBack() ? router.back() : router.replace('/');
     } else {
       router.replace("/(auth)");
     }

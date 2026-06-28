@@ -298,9 +298,11 @@ export default function BillingScreen() {
           </View>
         ) : (
           <View style={[styles.cartBox, { borderColor: colors.border }]}>
-            {items.map((item, idx) => (
-              <View key={item.product._id} style={{ borderBottomColor: colors.border, borderBottomWidth: idx < items.length - 1 ? 1 : 0 }}>
-                <View style={[styles.cartRow]}>
+            {items.map((item, idx) => {
+              const isFixedQty = item.product.trackImei || item.product.trackSerial;
+              return (
+                <View key={item.id} style={{ borderBottomColor: colors.border, borderBottomWidth: idx < items.length - 1 ? 1 : 0 }}>
+                  <View style={[styles.cartRow]}>
                     <View style={[styles.cartThumb, { backgroundColor: colors.bg4 }]}>
                       <Ionicons name="cube-outline" size={16} color={colors.text2} />
                     </View>
@@ -314,19 +316,23 @@ export default function BillingScreen() {
                       </Text>
                     </View>
                   <View style={styles.qtyRow}>
-                    <Pressable
-                      style={[styles.qtyBtn, { borderColor: colors.border2 }]}
-                      onPress={() => updateQty(item.product._id, item.qty - 1)}
-                    >
-                      <Ionicons name="remove" size={14} color={colors.text2} />
-                    </Pressable>
+                    {!isFixedQty && (
+                      <Pressable
+                        style={[styles.qtyBtn, { borderColor: colors.border2 }]}
+                        onPress={() => updateQty(item.id, item.qty - 1)}
+                      >
+                        <Ionicons name="remove" size={14} color={colors.text2} />
+                      </Pressable>
+                    )}
                     <Text style={[styles.qtyText, { color: colors.foreground }]}>{item.qty}</Text>
-                    <Pressable
-                      style={[styles.qtyBtn, { borderColor: colors.border2 }]}
-                      onPress={() => updateQty(item.product._id, item.qty + 1)}
-                    >
-                      <Ionicons name="add" size={14} color={colors.text2} />
-                    </Pressable>
+                    {!isFixedQty && (
+                      <Pressable
+                        style={[styles.qtyBtn, { borderColor: colors.border2 }]}
+                        onPress={() => updateQty(item.id, item.qty + 1)}
+                      >
+                        <Ionicons name="add" size={14} color={colors.text2} />
+                      </Pressable>
+                    )}
                   </View>
                 </View>
                 
@@ -337,7 +343,7 @@ export default function BillingScreen() {
                       <View key={id} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bg3, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start', gap: 6 }}>
                         <Ionicons name="barcode-outline" size={12} color={colors.text2} />
                         <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: colors.foreground }}>{id}</Text>
-                        <Pressable onPress={() => removeIdentifier(item.product._id, id)} hitSlop={6}>
+                        <Pressable onPress={() => removeIdentifier(item.id, id)} hitSlop={6}>
                            <Ionicons name="close" size={14} color={colors.redText} />
                         </Pressable>
                       </View>
@@ -355,8 +361,16 @@ export default function BillingScreen() {
                     )}
                   </View>
                 )}
+                {isFixedQty && (
+                  <View style={{ paddingHorizontal: 12, paddingBottom: 12 }}>
+                    <Pressable onPress={() => removeItem(item.id)}>
+                      <Text style={{ color: colors.destructive, fontSize: 12, fontWeight: "600" }}>Remove Item</Text>
+                    </Pressable>
+                  </View>
+                )}
               </View>
-            ))}
+            )
+            })}
           </View>
         )}
 

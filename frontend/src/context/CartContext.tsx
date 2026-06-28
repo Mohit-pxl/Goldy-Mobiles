@@ -3,6 +3,7 @@ import React, { createContext, useCallback, useContext, useState } from "react";
 import { Product } from "@/services/api";
 
 export interface CartItem {
+  id: string; // unique cart item id
   product: Product;
   qty: number;
   identifiers?: string[];
@@ -18,6 +19,7 @@ interface CartContextType {
   subtotal: number;
   gstAmount: number;
   total: number;
+  isFixedQty?: boolean;
 }
 
 const CartContext = createContext<CartContextType | null>(null);
@@ -27,47 +29,46 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const addItem = useCallback((p: Product, identifier?: string) => {
     setItems((prev) => {
-      const idx = prev.findIndex((x) => x.product._id === p._id);
-      if (idx >= 0) {
-        const next = [...prev];
-        const existingIdentifiers = next[idx].identifiers || [];
-        
-        if (identifier) {
-          if (existingIdentifiers.includes(identifier)) {
-            // Already added this specific IMEI/Serial
-            return prev;
-          }
-          next[idx] = { 
-            ...next[idx], 
-            qty: next[idx].qty + 1,
-            identifiers: [...existingIdentifiers, identifier]
-          };
-        } else {
+      if (identifier || p.trackImei || p.trackSerial) {
+        // IMEI/Serial logic: Do NOT group. Add as a separate row.
+        const alreadyExists = prev.some(
+          (x) => x.product._id === p._id && x.identifiers?.includes(identifier || "")
+        );
+        if (identifier && alreadyExists) return prev; // Do not add duplicate IMEI
+
+        const cartItemId = identifier ? `${p._id}-${identifier}` : `${p._id}-${Date.now()}-${Math.random()}`;
+        return [
+          ...prev,
+          { id: cartItemId, product: p, qty: 1, identifiers: identifier ? [identifier] : [] },
+        ];
+      } else {
+        // Quantity logic: Group by product ID
+        const idx = prev.findIndex((x) => x.product._id === p._id && (!x.identifiers || x.identifiers.length === 0));
+        if (idx >= 0) {
+          const next = [...prev];
           next[idx] = { ...next[idx], qty: next[idx].qty + 1 };
+          return next;
         }
-        return next;
+        return [...prev, { id: p._id, product: p, qty: 1, identifiers: [] }];
       }
-      return [...prev, { product: p, qty: 1, identifiers: identifier ? [identifier] : [] }];
     });
   }, []);
 
   const removeItem = useCallback((id: string) => {
-    setItems((prev) => prev.filter((x) => x.product._id !== id));
+    setItems((prev) => prev.filter((x) => x.id !== id));
   }, []);
 
   const updateQty = useCallback((id: string, qty: number) => {
     if (qty <= 0) {
-      setItems((prev) => prev.filter((x) => x.product._id !== id));
+      setItems((prev) => prev.filter((x) => x.id !== id));
       return;
     }
-    // We shouldn't randomly increase qty if identifiers are required, but for UI simplicity we allow it 
-    // and rely on validation before checkout. For now just update the qty.
-    setItems((prev) => prev.map((x) => (x.product._id === id ? { ...x, qty } : x)));
+    setItems((prev) => prev.map((x) => (x.id === id ? { ...x, qty } : x)));
   }, []);
 
-  const removeIdentifier = useCallback((productId: string, identifier: string) => {
+  const removeIdentifier = useCallback((cartItemId: string, identifier: string) => {
     setItems((prev) => prev.map(x => {
-      if (x.product._id === productId && x.identifiers) {
+      if (x.id === cartItemId && x.identifiers) {
         const newIdentifiers = x.identifiers.filter(id => id !== identifier);
         return { ...x, identifiers: newIdentifiers, qty: Math.max(0, x.qty - 1) };
       }

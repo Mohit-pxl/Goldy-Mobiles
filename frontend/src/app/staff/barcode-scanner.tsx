@@ -99,35 +99,46 @@ export default function BarcodeScannerScreen() {
       
       if (!selectedCodeData && newArray.length > 0) {
         setSelectedCodeData(newArray[0].data);
+        // Auto-submit the scanned code
+        setTimeout(() => handleUseSelectedCode(newArray[0].data), 300);
       }
     }
   };
 
-  const handleUseSelectedCode = async () => {
-    if (!selectedCodeData) return;
+  const handleUseSelectedCode = async (overrideData?: string) => {
+    const dataToUse = overrideData || selectedCodeData;
+    if (!dataToUse) return;
     
     setIsScanning(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     if (isRawMode) {
       if (productId) {
-        setTargetedScanResult(selectedCodeData, productId);
+        setTargetedScanResult(dataToUse, productId);
       } else {
-        setScanResult(selectedCodeData);
+        setScanResult(dataToUse);
       }
-      router.back();
+      router.canGoBack() ? router.back() : router.replace('/');
       return;
     }
 
     setResolving(true);
     setError(null);
     try {
-      const res = await apiGet<Product & { foundIdentifier?: { code: string } }>(`/products/barcode/${encodeURIComponent(selectedCodeData)}`);
+      const res = await apiGet<Product & { foundIdentifier?: { code: string } }>(`/products/barcode/${encodeURIComponent(dataToUse)}`);
       const product = res.data;
-      setResolvedProduct(product, product.foundIdentifier?.code);
+      
+      let finalCode = product.foundIdentifier?.code;
+      if (!finalCode) {
+        // Fallback: If product uses IMEI/Serial and the barcode matches one, use it
+        if ((product.trackImei || product.trackSerial) && dataToUse.length >= 6) {
+           finalCode = dataToUse;
+        }
+      }
+      setResolvedProduct(product, finalCode);
       router.canGoBack() ? router.back() : router.replace('/');
     } catch {
-      setError(`No product found for barcode "${selectedCodeData}"`);
+      setError(`No product found for barcode "${dataToUse}"`);
       setTimeout(() => {
         setIsScanning(true);
         setResolving(false);

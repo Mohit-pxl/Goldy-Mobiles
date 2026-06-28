@@ -59,7 +59,7 @@ export default function RemoveProductScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       <View style={[styles.topBar, { borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => router.back()} hitSlop={8}>
+        <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace('/')} hitSlop={8}>
           <Ionicons name="arrow-back" size={22} color={colors.text2} />
         </Pressable>
         <Text style={[styles.topTitle, { color: colors.foreground }]}>Remove Products</Text>

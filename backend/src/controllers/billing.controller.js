@@ -142,6 +142,14 @@ const createInvoice = [
         product.stock -= item.qty;
         await product.save();
 
+        if ((trackingType === 'IMEI' || trackingType === 'SERIAL') && item.identifiers && item.identifiers.length > 0) {
+          // Delete sold product items from inventory per user request
+          await ProductItem.deleteMany({
+            code: { $in: item.identifiers },
+            productId: product._id
+          });
+        }
+
         // Write stock movement
         await StockMovement.create(
           [
