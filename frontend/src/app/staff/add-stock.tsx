@@ -1,12 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigation } from "@react-navigation/native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
 import { apiGet, apiPost, Product } from "@/services/api";
+import { consumeScanResult } from "@/utils/scanStore";
 
 type StockLine = { code: string; color?: string };
 
@@ -21,9 +23,11 @@ export default function AddStockScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { productId, scannedBarcode } = useLocalSearchParams<{ productId?: string; scannedBarcode?: string }>();
+  const navigation = useNavigation();
+  const { productId } = useLocalSearchParams<{ productId?: string }>();
 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [stockType, setStockType] = useState<"in" | "out" | null>(null);
   const [productSearch, setProductSearch] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [searching, setSearching] = useState(false);
@@ -32,6 +36,7 @@ export default function AddStockScreen() {
   const [note, setNote] = useState("");
   const [lines, setLines] = useState<StockLine[]>([]);
   const [saving, setSaving] = useState(false);
+  const [codeError, setCodeError] = useState("");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const trackingType = selectedProduct?.trackingType || (selectedProduct?.trackImei ? "IMEI" : selectedProduct?.trackSerial ? "SERIAL" : "QUANTITY");
@@ -45,11 +50,16 @@ export default function AddStockScreen() {
       .catch(() => Alert.alert("Error", "Could not load product."));
   }, [productId]);
 
+  // When screen regains focus (after scanner closes), check for scanned value
   useEffect(() => {
-    if (!scannedBarcode || !isTracked) return;
-    addCode(scannedBarcode);
-    router.setParams({ scannedBarcode: undefined });
-  }, [scannedBarcode, isTracked]);
+    const unsubscribe = navigation.addListener('focus', () => {
+      const code = consumeScanResult();
+      if (code) {
+        setManualCode(code);
+      }
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const handleProductSearch = (q: string) => {
     setProductSearch(q);
@@ -73,6 +83,7 @@ export default function AddStockScreen() {
 
   const selectProduct = (product: Product) => {
     setSelectedProduct(product);
+    setStockType(null);
     setProductSearch("");
     setProducts([]);
     setLines([]);
@@ -84,11 +95,12 @@ export default function AddStockScreen() {
     const code = (rawCode || manualCode).trim();
     if (!code) return;
     if (lines.some((line) => line.code === code)) {
-      Alert.alert("Duplicate", `${trackingLabel(selectedProduct)} already added in this entry.`);
+      setCodeError("Already exists");
       return;
     }
     setLines((prev) => [...prev, { code, color: colorOptions[0] }]);
     setManualCode("");
+    setCodeError("");
   };
 
   const updateColor = (code: string, color: string) => {
@@ -101,7 +113,11 @@ export default function AddStockScreen() {
 
   const submit = async () => {
     if (!selectedProduct) {
-      Alert.alert("Select product", "Choose an existing product before adding stock.");
+      Alert.alert("Select product", "Choose an existing product before managing stock.");
+      return;
+    }
+    if (!stockType) {
+      Alert.alert("Select type", "Choose whether to add (IN) or remove (OUT) stock.");
       return;
     }
     const count = isTracked ? lines.length : Number(qty);
@@ -112,17 +128,19 @@ export default function AddStockScreen() {
 
     setSaving(true);
     try {
-      await apiPost("/stock/movements", {
+      const payload = {
         productId: selectedProduct._id,
-        type: "in",
+        type: stockType,
         qty: count,
-        note: note || "Stock intake",
+        note: note || (stockType === "in" ? "Stock intake" : "Stock removal"),
         items: isTracked ? lines : undefined,
-      });
+      };
+      console.log("[Stock] Sending payload:", JSON.stringify(payload));
+      await apiPost("/stock/movements", payload);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.canGoBack() ? router.back() : router.replace("/(staff)/products");
     } catch (e: unknown) {
-      Alert.alert("Error", e instanceof Error ? e.message : "Failed to add stock.");
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to update stock.");
     } finally {
       setSaving(false);
     }
@@ -134,9 +152,9 @@ export default function AddStockScreen() {
         <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace("/(staff)/products")} style={styles.iconBtn}>
           <Ionicons name="arrow-back" size={22} color={colors.text2} />
         </Pressable>
-        <Text style={[styles.topTitle, { color: colors.foreground }]}>Add Stock</Text>
+        <Text style={[styles.topTitle, { color: colors.foreground }]}>Manage Stock</Text>
         <Pressable style={[styles.saveBtn, { backgroundColor: colors.primary, opacity: saving ? 0.7 : 1 }]} onPress={submit} disabled={saving}>
-          {saving ? <ActivityIndicator color="#000" size="small" /> : <Text style={styles.saveBtnText}>Save</Text>}
+          {saving ? <ActivityIndicator color="#000" size="small" /> : <Text style={styles.saveBtnText}>Done</Text>}
         </Pressable>
       </View>
 
@@ -178,13 +196,38 @@ export default function AddStockScreen() {
         )}
 
         {selectedProduct && (
+          <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
+            <Pressable
+              style={[
+                styles.typeBtn,
+                { backgroundColor: stockType === "in" ? colors.greenBg : colors.bg3, borderColor: stockType === "in" ? colors.green : colors.border }
+              ]}
+              onPress={() => setStockType("in")}
+            >
+              <Ionicons name="arrow-down-circle" size={20} color={stockType === "in" ? colors.greenText : colors.text2} />
+              <Text style={[styles.typeBtnText, { color: stockType === "in" ? colors.greenText : colors.text2 }]}>Stock IN</Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.typeBtn,
+                { backgroundColor: stockType === "out" ? colors.redBg : colors.bg3, borderColor: stockType === "out" ? colors.redText : colors.border }
+              ]}
+              onPress={() => setStockType("out")}
+            >
+              <Ionicons name="arrow-up-circle" size={20} color={stockType === "out" ? colors.redText : colors.text2} />
+              <Text style={[styles.typeBtnText, { color: stockType === "out" ? colors.redText : colors.text2 }]}>Stock OUT</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {selectedProduct && stockType && (
           <>
-            <Text style={[styles.section, { color: colors.primary }]}>Inventory</Text>
+            <Text style={[styles.section, { color: colors.primary }]}>{stockType === "in" ? "Add Inventory" : "Remove Inventory"}</Text>
             {isTracked ? (
               <View style={{ gap: 12 }}>
                 <Pressable
                   style={[styles.scanBtn, { backgroundColor: colors.bg4, borderColor: colors.primary }]}
-                  onPress={() => router.push({ pathname: "/staff/barcode-scanner", params: { returnMode: "barcode", returnPath: "/staff/add-stock", productId: selectedProduct._id, expectedCategory: trackingType === "IMEI" ? "IMEI" : "Serial" } })}
+                  onPress={() => router.push({ pathname: "/staff/barcode-scanner", params: { returnMode: "barcode", expectedCategory: trackingType === "IMEI" ? "IMEI" : "Serial" } })}
                 >
                   <Ionicons name="scan" size={18} color={colors.primary} />
                   <Text style={[styles.scanText, { color: colors.primary }]}>Scan {trackingLabel(selectedProduct)}</Text>
@@ -193,15 +236,17 @@ export default function AddStockScreen() {
                   <TextInput
                     style={[styles.input, { flex: 1, color: colors.foreground, backgroundColor: colors.bg3, borderColor: colors.border }]}
                     value={manualCode}
-                    onChangeText={setManualCode}
+                    onChangeText={(val) => { setManualCode(val); setCodeError(""); }}
                     placeholder={`Enter ${trackingLabel(selectedProduct)}`}
                     placeholderTextColor={colors.text3}
                     onSubmitEditing={() => addCode()}
                   />
-                  <Pressable style={[styles.smallBtn, { backgroundColor: colors.bg4, borderColor: colors.border2 }]} onPress={() => addCode()}>
-                    <Ionicons name="add" size={18} color={colors.primary} />
+                  <Pressable style={[styles.addInlineBtn, { backgroundColor: colors.primary }]} onPress={() => addCode()}>
+                    <Ionicons name="add" size={18} color="#000" />
+                    <Text style={styles.addInlineBtnText}>Add</Text>
                   </Pressable>
                 </View>
+                {codeError ? <Text style={{ color: colors.destructive, fontSize: 13, marginTop: -4, marginLeft: 4 }}>{codeError}</Text> : null}
                 {lines.map((line) => (
                   <View key={line.code} style={[styles.lineCard, { backgroundColor: colors.bg2, borderColor: colors.border }]}>
                     <View style={styles.lineHeader}>
@@ -210,16 +255,18 @@ export default function AddStockScreen() {
                         <Ionicons name="close" size={18} color={colors.text3} />
                       </Pressable>
                     </View>
-                    <View style={styles.colorRow}>
-                      {colorOptions.map((color) => {
-                        const active = line.color === color;
-                        return (
-                          <Pressable key={color} style={[styles.colorChip, { backgroundColor: active ? colors.primary : colors.bg3, borderColor: active ? colors.primary : colors.border2 }]} onPress={() => updateColor(line.code, color)}>
-                            <Text style={{ color: active ? "#000" : colors.text2, fontSize: 11, fontFamily: "Inter_600SemiBold" }}>{color}</Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
+                    {stockType === "in" && (
+                      <View style={styles.colorRow}>
+                        {colorOptions.map((color) => {
+                          const active = line.color === color;
+                          return (
+                            <Pressable key={color} style={[styles.colorChip, { backgroundColor: active ? colors.primary : colors.bg3, borderColor: active ? colors.primary : colors.border2 }]} onPress={() => updateColor(line.code, color)}>
+                              <Text style={{ color: active ? "#000" : colors.text2, fontSize: 11, fontFamily: "Inter_600SemiBold" }}>{color}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
                   </View>
                 ))}
               </View>
@@ -229,7 +276,7 @@ export default function AddStockScreen() {
                 value={qty}
                 onChangeText={setQty}
                 keyboardType="numeric"
-                placeholder="Stock quantity"
+                placeholder={`Quantity to ${stockType === "in" ? "add" : "remove"}`}
                 placeholderTextColor={colors.text3}
               />
             )}
@@ -261,11 +308,15 @@ const styles = StyleSheet.create({
   searchBox: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 },
   searchInput: { flex: 1, fontSize: 14, fontFamily: "Inter_500Medium" },
   resultRow: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderRadius: 10, padding: 12, gap: 10 },
+  typeBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12, borderRadius: 10, borderWidth: 1 },
+  typeBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   scanBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1, borderRadius: 10, paddingVertical: 12 },
   scanText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   entryRow: { flexDirection: "row", gap: 8 },
   input: { borderWidth: 1, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 11, fontSize: 13, fontFamily: "Inter_400Regular" },
   smallBtn: { width: 44, borderRadius: 9, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  addInlineBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 16, borderRadius: 9, justifyContent: "center" },
+  addInlineBtnText: { color: "#000", fontSize: 14, fontFamily: "Inter_600SemiBold" },
   lineCard: { borderWidth: 1, borderRadius: 10, padding: 10, gap: 10 },
   lineHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   codeText: { flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" },

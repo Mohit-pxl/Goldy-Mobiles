@@ -29,6 +29,7 @@ export default function StaffProductsScreen() {
     queryKey: ["staff-products", activeFilter],
     queryFn: async () => {
       const params = new URLSearchParams();
+      params.set("limit", "1000"); // Fetch all products for local search and complete listing
       if (activeFilter === "⚠ Low stock") params.set("lowStock", "true");
       else if (activeFilter !== "All") params.set("category", activeFilter);
       const res = await apiGet<Product[]>(`/products?${params}`);
@@ -58,6 +59,19 @@ export default function StaffProductsScreen() {
             >
               <Ionicons name="cube-outline" size={15} color={colors.primary} />
               <Text style={[styles.stockBtnText, { color: colors.primary }]}>Stock</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [
+                styles.fab,
+                { backgroundColor: colors.destructive, opacity: pressed ? 0.8 : 1, marginRight: 8 }
+              ]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/staff/remove-product");
+              }}
+            >
+              <Ionicons name="trash" size={16} color="#fff" />
+              <Text style={[styles.fabText, { color: "#fff" }]}>Remove</Text>
             </Pressable>
             <Pressable
               style={({ pressed }) => [

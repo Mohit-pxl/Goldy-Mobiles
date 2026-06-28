@@ -19,6 +19,8 @@ import CustomerPicker from "@/components/CustomerPicker";
 import { useCart } from "@/context/CartContext";
 import { useColors } from "@/hooks/useColors";
 import { apiGet, apiPost, Customer, Invoice, Product } from "@/services/api";
+import { consumeResolvedProduct, consumeTargetedScanResult } from "@/utils/scanStore";
+import { useNavigation } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
 
 const PAYMENT_MODES = ["cash", "upi", "card", "credit"] as const;
@@ -35,9 +37,10 @@ export default function BillingScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const params = useLocalSearchParams<{ scannedProductId?: string; scannedIdentifier?: string; scanTimestamp?: string; mode?: string }>();
+  const params = useLocalSearchParams<{ mode?: string }>();
   const isQuotationMode = params.mode === "quotation";
   const { items, addItem, updateQty, removeIdentifier, clearCart, subtotal, gstAmount, total } = useCart();
+  const navigation = useNavigation();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Product[]>([]);
@@ -58,17 +61,26 @@ export default function BillingScreen() {
 
   /* ── Handle scanned product returned from camera screen ── */
   useEffect(() => {
-    const stime = params.scanTimestamp;
-    const sid = params.scannedProductId;
-    if (!sid || !stime || stime === prevScanTime.current) return;
-    prevScanTime.current = stime;
-    apiGet<Product>(`/products/${sid}`)
-      .then((r) => { 
-        addItem(r.data, params.scannedIdentifier); 
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); 
-      })
-      .catch(() => Alert.alert("Error", "Could not load scanned product."));
-  }, [params.scanTimestamp, params.scannedProductId, params.scannedIdentifier, addItem]);
+    const unsubscribe = navigation.addListener('focus', () => {
+      // 1. Check if a full product was resolved from a general scan
+      const resolved = consumeResolvedProduct();
+      if (resolved && resolved.product) {
+        addItem(resolved.product, resolved.identifier);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      
+      // 2. Check if a raw code (IMEI/Serial) was scanned for a specific item
+      const targeted = consumeTargetedScanResult();
+      if (targeted && targeted.code && targeted.targetId) {
+        const item = items.find(i => i.product._id === targeted.targetId);
+        if (item) {
+          addItem(item.product, targeted.code);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+      }
+    });
+    return unsubscribe;
+  }, [navigation, addItem, items]);
 
   const fmt = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 
@@ -333,7 +345,7 @@ export default function BillingScreen() {
                     {(!item.identifiers || item.identifiers.length < item.qty) && (
                       <Pressable 
                         style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}
-                        onPress={() => router.push({ pathname: "/staff/barcode-scanner", params: { returnMode: "barcode", returnPath: "/(staff)/billing", productId: item.product._id, expectedCategory: item.product.trackImei ? "IMEI" : "Serial" } })}
+                        onPress={() => router.push({ pathname: "/staff/barcode-scanner", params: { returnMode: "barcode", productId: item.product._id, expectedCategory: item.product.trackImei ? "IMEI" : "Serial" } })}
                       >
                          <Ionicons name="scan" size={14} color={colors.primary} />
                          <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: colors.primary }}>

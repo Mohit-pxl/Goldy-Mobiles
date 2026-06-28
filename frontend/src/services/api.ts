@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 
-const getApiUrl = () => {
+export const getApiUrl = () => {
   // 1. Explicit env var takes priority
   if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
   if (process.env.EXPO_PUBLIC_DOMAIN)

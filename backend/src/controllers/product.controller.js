@@ -47,6 +47,10 @@ const listProducts = async (req, res, next) => {
     if (lowStock === 'true') {
       filter.$expr = { $lte: ["$stock", "$lowStockThreshold"] };
     }
+    
+    if (req.query.outOfStock === 'true') {
+      filter.stock = 0;
+    }
 
     if (summary === 'true') {
       const [total, lowStockCount, productsList] = await Promise.all([

@@ -69,7 +69,7 @@ export default function AddProductScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
-  const { id, scannedBarcode } = useLocalSearchParams<{ id?: string; scannedBarcode?: string }>();
+  const { id } = useLocalSearchParams<{ id?: string }>();
 
   const isEdit = !!id;
   const isAdmin = user?.role === "admin";
@@ -92,7 +92,6 @@ export default function AddProductScreen() {
     lowStockThreshold: "5",
     gstPercent: "18",
     hsnCode: "",
-    barcode: "",
     sku: "",
     description: "",
   });
@@ -118,7 +117,6 @@ export default function AddProductScreen() {
           lowStockThreshold: String(p.lowStockThreshold),
           gstPercent: String(p.gstPercent),
           hsnCode: p.hsnCode || "",
-          barcode: p.barcode || "",
           sku: p.sku || p.internalCode || "",
           description: p.description || "",
         });
@@ -129,12 +127,7 @@ export default function AddProductScreen() {
     }
   }, [id, isEdit]);
 
-  useEffect(() => {
-    if (scannedBarcode) {
-      setForm((prev) => ({ ...prev, barcode: scannedBarcode }));
-      router.setParams({ scannedBarcode: undefined });
-    }
-  }, [scannedBarcode, router]);
+
 
   const set = (k: keyof typeof form, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
   const toggleColor = (color: string) => {
@@ -181,12 +174,6 @@ export default function AddProductScreen() {
 
   const removeImage = (i: number) => setImages((prev) => prev.filter((_, idx) => idx !== i));
 
-  const generateBarcode = () => {
-    const code = `GM${Date.now().toString().slice(-8)}`;
-    set("barcode", code);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
-
   const addSpec = () => setSpecs((prev) => [...prev, { key: "", value: "" }]);
   const setSpec = (i: number, field: "key" | "value", val: string) => {
     setSpecs((prev) => prev.map((s, idx) => idx === i ? { ...s, [field]: val } : s));
@@ -205,11 +192,6 @@ export default function AddProductScreen() {
 
     setSaving(true);
     try {
-      let finalBarcode = form.barcode?.trim();
-      if (!finalBarcode) {
-        finalBarcode = `GM${Date.now().toString().slice(-8)}`;
-      }
-
       const payload = {
         name: form.name.trim(),
         brand: form.brand.trim(),
@@ -225,7 +207,6 @@ export default function AddProductScreen() {
         lowStockThreshold: Number(form.lowStockThreshold || 5),
         gstPercent: Number(form.gstPercent || 0),
         hsnCode: form.hsnCode || undefined,
-        barcode: finalBarcode,
         sku: form.sku || undefined,
         internalCode: form.sku || undefined,
         description: form.description || undefined,
@@ -362,27 +343,7 @@ export default function AddProductScreen() {
               <Field label="Low stock alert" value={form.lowStockThreshold} onChange={(v) => set("lowStockThreshold", v)} keyboardType="numeric" />
             </View>
           </View>
-          <View style={styles.fieldGroup}>
-            <Label text="Barcode" />
-            <View style={styles.barcodeRow}>
-              <TextInput
-                style={[styles.input, { flex: 1, color: colors.foreground, backgroundColor: colors.bg3, borderColor: colors.border }]}
-                value={form.barcode}
-                onChangeText={(v) => set("barcode", v)}
-                placeholder="Scan or enter barcode"
-                placeholderTextColor={colors.text3}
-              />
-              <Pressable
-                style={[styles.autoBtn, { backgroundColor: colors.bg4, borderColor: colors.border2 }]}
-                onPress={() => router.push({ pathname: "/staff/barcode-scanner", params: { returnMode: "barcode", returnPath: "/staff/add-product", productId: id || "", expectedCategory: "EAN/UPC" } })}
-              >
-                <Ionicons name="scan" size={16} color={colors.primary} />
-              </Pressable>
-              <Pressable style={[styles.autoBtn, { backgroundColor: colors.bg4, borderColor: colors.border2 }]} onPress={generateBarcode}>
-                <Text style={{ color: colors.primary, fontSize: 11, fontFamily: "Inter_600SemiBold" }}>Auto</Text>
-              </Pressable>
-            </View>
-          </View>
+
           <Field label="SKU" value={form.sku} onChange={(v) => set("sku", v)} />
 
           <Text style={[styles.section, { color: colors.primary }]}>Specifications</Text>

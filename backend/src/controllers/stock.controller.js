@@ -29,11 +29,16 @@ const createMovement = [
       const Product = require('../models/Product');
       const ProductItem = require('../models/ProductItem');
 
+      console.log('[Stock] Received:', { productId, type, qty, itemsCount: items?.length, identifiersCount: identifiers?.length });
+
       const product = await Product.findById(productId);
       if (!product) return errorResponse(res, 'Product not found.', 404);
 
       const normalizedTrackingType = product.trackingType || (product.trackImei ? 'IMEI' : product.trackSerial ? 'SERIAL' : 'QUANTITY');
       const isTracked = normalizedTrackingType === 'IMEI' || normalizedTrackingType === 'SERIAL';
+      
+      console.log('[Stock] Product tracking:', { trackingType: normalizedTrackingType, isTracked, productName: product.name });
+
       const trackedItems = Array.isArray(items) && items.length > 0
         ? items.map((item) => ({
             code: String(item.code || '').trim(),
@@ -44,7 +49,7 @@ const createMovement = [
 
       if (isTracked && type === 'in') {
         if (cleanCodes.length !== qty) {
-          return errorResponse(res, `This product requires exactly ${qty} ${product.trackImei ? 'IMEIs' : 'Serial Numbers'}.`, 400);
+          return errorResponse(res, `This product requires exactly ${qty} ${normalizedTrackingType === 'IMEI' ? 'IMEIs' : 'Serial Numbers'}. Got ${cleanCodes.length}.`, 400);
         }
 
         const duplicateInRequest = cleanCodes.find((code, index) => cleanCodes.indexOf(code) !== index);
@@ -68,6 +73,7 @@ const createMovement = [
           addedBy: req.user._id
         }));
         await ProductItem.insertMany(itemsToInsert);
+        console.log(`[Stock] Inserted ${itemsToInsert.length} ProductItem(s) for stock-in:`, cleanCodes);
       } else if (isTracked && type === 'out') {
         if (cleanCodes.length !== qty) {
           return errorResponse(res, `Manual out movements require exactly ${qty} ${normalizedTrackingType === 'IMEI' ? 'IMEIs' : 'Serial Numbers'}.`, 400);
@@ -76,10 +82,10 @@ const createMovement = [
         if (availableItems.length !== qty) {
           return errorResponse(res, 'One or more identifiers are invalid or already sold.', 400);
         }
-        await ProductItem.updateMany(
-          { productId, code: { $in: cleanCodes }, status: 'IN_STOCK' },
-          { $set: { status: 'DEFECTIVE' } }
+        await ProductItem.deleteMany(
+          { productId, code: { $in: cleanCodes }, status: 'IN_STOCK' }
         );
+        console.log(`[Stock] Deleted ${cleanCodes.length} ProductItem(s) from DB for stock-out:`, cleanCodes);
       }
 
       const movement = await createStockMovement({

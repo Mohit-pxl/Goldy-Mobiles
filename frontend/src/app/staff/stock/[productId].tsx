@@ -35,7 +35,7 @@ export default function StockMovementsScreen() {
   const movementsQuery = useQuery({
     queryKey: ["stock-movements", productId],
     queryFn: async () => {
-      const res = await apiGet<StockMovement[]>(`/stock/movements?productId=${productId}`);
+      const res = await apiGet<StockMovement[]>(`/stock/movements/${productId}`);
       return res.data || [];
     },
     enabled: !!productId,

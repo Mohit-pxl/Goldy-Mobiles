@@ -46,7 +46,7 @@ export default function ReportsScreen() {
   const lowStockQuery = useQuery({
     queryKey: ["low-stock"],
     queryFn: async () => {
-      const res = await apiGet<Product[]>("/products?lowStock=true");
+      const res = await apiGet<Product[]>("/products?lowStock=true&limit=1000");
       return res.data || [];
     },
   });

@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
 import { apiGet, Product } from "@/services/api";
+import { setScanResult, setTargetedScanResult, setResolvedProduct } from "@/utils/scanStore";
 
 type ScannedCode = {
   data: string;
@@ -68,9 +69,16 @@ export default function BarcodeScannerScreen() {
     if (!isScanning) return;
 
     if (!codesMapRef.current.has(data)) {
+      const info = categorizeCode(data, type);
+      
+      // Strict filtering based on expectedCategory
+      if (expectedCategory && info.category !== expectedCategory && expectedCategory !== "EAN/UPC") {
+        // If an expected category (IMEI/Serial) is set and it doesn't match, ignore it completely
+        return;
+      }
+
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       
-      const info = categorizeCode(data, type);
       const isRecommended = expectedCategory ? info.category === expectedCategory : info.category === "EAN/UPC";
 
       const newCode: ScannedCode = {
@@ -102,17 +110,12 @@ export default function BarcodeScannerScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     if (isRawMode) {
-      if (returnPath) {
-        const params: any = { scannedBarcode: selectedCodeData };
-        if (productId) {
-          params.id = productId;
-          params.productId = productId;
-        }
-        router.navigate({ pathname: returnPath as any, params });
+      if (productId) {
+        setTargetedScanResult(selectedCodeData, productId);
       } else {
-        router.canGoBack() ? router.back() : router.replace('/');
-        setTimeout(() => router.setParams({ scannedBarcode: selectedCodeData }), 10);
+        setScanResult(selectedCodeData);
       }
+      router.back();
       return;
     }
 
@@ -121,17 +124,8 @@ export default function BarcodeScannerScreen() {
     try {
       const res = await apiGet<Product & { foundIdentifier?: { code: string } }>(`/products/barcode/${encodeURIComponent(selectedCodeData)}`);
       const product = res.data;
+      setResolvedProduct(product, product.foundIdentifier?.code);
       router.canGoBack() ? router.back() : router.replace('/');
-      
-      const params: any = { 
-        scannedProductId: product._id, 
-        scannedProductName: product.name,
-        scanTimestamp: Date.now().toString()
-      };
-      if (product.foundIdentifier) {
-        params.scannedIdentifier = product.foundIdentifier.code;
-      }
-      setTimeout(() => router.setParams(params), 10);
     } catch {
       setError(`No product found for barcode "${selectedCodeData}"`);
       setTimeout(() => {
