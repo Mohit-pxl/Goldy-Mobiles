@@ -42,6 +42,7 @@ stockRouter.use(authenticate, requireRole(['staff', 'admin']));
  *         description: Stock movement recorded
  */
 stockRouter.post('/movement', createMovement);
+stockRouter.post('/movements', createMovement);
 
 /**
  * @swagger
@@ -62,6 +63,10 @@ stockRouter.post('/movement', createMovement);
  *         description: List of stock movements
  */
 stockRouter.get('/movements/:productId', getMovements);
+stockRouter.get('/movements', (req, res, next) => {
+  req.params.productId = req.query.productId;
+  return getMovements[1](req, res, next);
+});
 
 // Mount all routes
 router.use('/auth', authRoutes);

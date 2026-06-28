@@ -44,7 +44,6 @@ export default function BillingScreen() {
   const [searching, setSearching] = useState(false);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("cash");
   const [placing, setPlacing] = useState<null | "paid" | "unpaid">(null);
-  const [barcodeText, setBarcodeText] = useState("");
   const [customer, setCustomer] = useState<Customer | null>(null);
 
   const { data: recentInvoices = [] } = useQuery<Invoice[]>({
@@ -89,16 +88,24 @@ export default function BillingScreen() {
     }, 300);
   };
 
-  /* ── Manual barcode text lookup ── */
-  const handleBarcodeSearch = async () => {
-    if (!barcodeText.trim()) return;
+  const handleUnifiedLookup = async () => {
+    const query = searchQuery.trim();
+    if (!query) return;
     try {
-      const res = await apiGet<Product & { foundIdentifier?: { code: string } }>(`/products/barcode/${barcodeText.trim()}`);
+      const res = await apiGet<Product & { foundIdentifier?: { code: string } }>(`/products/barcode/${encodeURIComponent(query)}`);
       addItem(res.data, res.data.foundIdentifier?.code);
-      setBarcodeText("");
+      setSearchQuery("");
+      setSearchResults([]);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
-      Alert.alert("Not found", "No product matches that barcode.");
+      if (searchResults.length === 1) {
+        addItem(searchResults[0]);
+        setSearchQuery("");
+        setSearchResults([]);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        Alert.alert("Not found", "No product, barcode, IMEI, or serial number matches that entry.");
+      }
     }
   };
 
@@ -208,42 +215,29 @@ export default function BillingScreen() {
             <Ionicons name="barcode-outline" size={24} color={colors.primary} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.scanBannerTitle, { color: colors.primary }]}>Scan barcode</Text>
-            <Text style={[styles.scanBannerSub, { color: colors.text3 }]}>Point camera at product barcode</Text>
+            <Text style={[styles.scanBannerTitle, { color: colors.primary }]}>Scan product or device</Text>
+            <Text style={[styles.scanBannerSub, { color: colors.text3 }]}>Barcode, IMEI, or serial number</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.primary} />
         </Pressable>
 
-        {/* ── Manual barcode (optional, kept for utility but styled cleanly) ── */}
-        <View style={[styles.barcodeBox, { backgroundColor: colors.bg4 }]}>
-          <Ionicons name="keypad" size={16} color={colors.text3} />
-          <TextInput
-            style={[styles.barcodeInput, { color: colors.foreground }]}
-            placeholder="Or type barcode manually..."
-            placeholderTextColor={colors.text3}
-            value={barcodeText}
-            onChangeText={setBarcodeText}
-            onSubmitEditing={handleBarcodeSearch}
-            returnKeyType="search"
-          />
-          {barcodeText.length > 0 && (
-            <Pressable onPress={() => { handleBarcodeSearch(); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }} hitSlop={8} style={styles.searchActionBtn}>
-              <Text style={{ color: colors.primary, fontWeight: "600", fontSize: 12 }}>Enter</Text>
-            </Pressable>
-          )}
-        </View>
-
-        {/* ── Product search ── */}
         <View style={[styles.searchBox, { backgroundColor: colors.bg4 }]}>
-          <Ionicons name="search" size={18} color={colors.text3} />
+          <Ionicons name="scan" size={18} color={colors.text3} />
           <TextInput
             style={[styles.searchInput, { color: colors.foreground }]}
-            placeholder="Search by product name"
+            placeholder="Search or scan: name, barcode, IMEI, serial"
             placeholderTextColor={colors.text3}
             value={searchQuery}
             onChangeText={handleSearch}
+            onSubmitEditing={handleUnifiedLookup}
+            returnKeyType="search"
           />
           {searching && <ActivityIndicator size="small" color={colors.primary} />}
+          {searchQuery.length > 0 && !searching && (
+            <Pressable onPress={() => { handleUnifiedLookup(); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }} hitSlop={8} style={styles.searchActionBtn}>
+              <Text style={{ color: colors.primary, fontWeight: "600", fontSize: 12 }}>Enter</Text>
+            </Pressable>
+          )}
           {searchQuery.length > 0 && !searching && (
             <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
               <Ionicons name="close-circle" size={18} color={colors.text3} />

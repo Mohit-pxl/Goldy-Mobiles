@@ -19,7 +19,13 @@ const { paginate } = require('../utils/pagination');
  */
 const createInvoice = [
   body('items').isArray({ min: 1 }).withMessage('At least one item is required'),
-  body('items.*.product._id').isMongoId().withMessage('Valid productId required for each item'),
+  body('items.*').custom((item) => {
+    const productId = item.productId || (item.product && item.product._id);
+    if (!mongoose.isValidObjectId(productId)) {
+      throw new Error('Valid productId required for each item');
+    }
+    return true;
+  }),
   body('items.*.qty').isInt({ min: 1 }).withMessage('Quantity must be at least 1'),
   body('items.*.price').optional().isFloat({ min: 0 }),
   body('paymentMode')
@@ -57,6 +63,13 @@ const createInvoice = [
       let subtotal = 0;
       let totalCgst = 0;
       let totalSgst = 0;
+      const allRequestedIdentifiers = requestItems.flatMap((item) => item.identifiers || []);
+      const duplicateIdentifier = allRequestedIdentifiers.find(
+        (code, index) => allRequestedIdentifiers.indexOf(code) !== index
+      );
+      if (duplicateIdentifier) {
+        return errorResponse(res, `Duplicate identifier in invoice: ${duplicateIdentifier}`, 400);
+      }
 
       // Process each item: validate stock, compute totals
       for (const item of requestItems) {
@@ -91,7 +104,8 @@ const createInvoice = [
 
         // Handle identifiers
         const ProductItem = require('../models/ProductItem');
-        if (product.trackImei || product.trackSerial) {
+        const trackingType = product.trackingType || (product.trackImei ? 'IMEI' : product.trackSerial ? 'SERIAL' : 'QUANTITY');
+        if (trackingType === 'IMEI' || trackingType === 'SERIAL') {
           if (!item.identifiers || item.identifiers.length !== item.qty) {
             throw Object.assign(
               new Error(`Missing or incorrect number of identifiers for "${product.name}". Expected ${item.qty}.`),
@@ -103,7 +117,7 @@ const createInvoice = [
           const existingItems = await ProductItem.find({
             code: { $in: item.identifiers },
             productId: product._id,
-            status: 'IN_STOCK'
+            status: 'IN_STOCK',
           });
           
           if (existingItems.length !== item.qty) {
@@ -179,10 +193,14 @@ const createInvoice = [
       const allIdentifiers = invoiceItems.flatMap(i => i.identifiers);
       if (allIdentifiers.length > 0) {
         const ProductItem = require('../models/ProductItem');
-        await ProductItem.updateMany(
-          { code: { $in: allIdentifiers } },
+        const updateResult = await ProductItem.updateMany(
+          { code: { $in: allIdentifiers }, status: 'IN_STOCK' },
           { $set: { status: 'SOLD', invoiceId: invoice._id } }
         );
+        const modified = updateResult.modifiedCount ?? updateResult.nModified;
+        if (modified !== allIdentifiers.length) {
+          return errorResponse(res, 'One or more inventory items were already sold before the invoice could be finalized.', 409);
+        }
       }
 
       // Update StockMovement records with the invoice reference

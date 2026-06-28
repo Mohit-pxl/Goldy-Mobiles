@@ -130,11 +130,11 @@ export default function StockMovementsScreen() {
 
       <Pressable
         style={[styles.addBtn, { backgroundColor: colors.bg3, borderColor: colors.border2, margin: 14 }]}
-        onPress={() => setShowAdd((v) => !v)}
+        onPress={() => router.push({ pathname: "/staff/add-stock" as any, params: { productId } })}
       >
         <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
-        <Text style={[styles.addBtnText, { color: colors.primary }]}>Add stock movement</Text>
-        <Ionicons name={showAdd ? "chevron-up" : "chevron-down"} size={16} color={colors.text3} />
+        <Text style={[styles.addBtnText, { color: colors.primary }]}>Add stock</Text>
+        <Ionicons name="chevron-forward" size={16} color={colors.text3} />
       </Pressable>
 
       {showAdd && (

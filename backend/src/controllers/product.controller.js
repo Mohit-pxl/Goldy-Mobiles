@@ -22,6 +22,9 @@ const listProducts = async (req, res, next) => {
         { name: { $regex: search, $options: 'i' } },
         { brand: { $regex: search, $options: 'i' } },
         { barcode: search },
+        { internalCode: search },
+        { sku: search },
+        { model: { $regex: search, $options: 'i' } },
       ];
     }
     if (category) {
@@ -86,12 +89,13 @@ const listProducts = async (req, res, next) => {
  */
 const createProduct = [
   body('name').notEmpty().trim().withMessage('Product name is required'),
-  body('costPrice').isFloat({ min: 0 }).withMessage('costPrice must be a positive number'),
+  body('costPrice').optional().isFloat({ min: 0 }).withMessage('costPrice must be a positive number'),
   body('sellingPrice').isFloat({ min: 0 }).withMessage('sellingPrice must be a positive number'),
-  body('stock').optional().isInt({ min: 0 }).withMessage('stock must be a non-negative integer'),
   body('gstPercent').optional().isFloat({ min: 0 }).withMessage('gstPercent must be non-negative'),
   body('categoryId').optional().isMongoId().withMessage('Invalid categoryId'),
   body('images').optional().isArray().withMessage('images must be an array'),
+  body('availableColors').optional().isArray().withMessage('availableColors must be an array'),
+  body('trackingType').optional().isIn(['IMEI', 'SERIAL', 'QUANTITY']).withMessage('Invalid trackingType'),
 
   async (req, res, next) => {
     try {
@@ -122,6 +126,10 @@ const createProduct = [
 
       const product = await Product.create({
         ...req.body,
+        stock: 0,
+        costPrice: req.body.costPrice || 0,
+        internalCode: req.body.internalCode || req.body.sku,
+        sku: req.body.sku || req.body.internalCode,
         createdBy: req.user._id,
       });
 
@@ -170,7 +178,9 @@ const updateProduct = [
   param('id').isMongoId().withMessage('Invalid product ID'),
   body('costPrice').optional().isFloat({ min: 0 }).withMessage('costPrice must be positive'),
   body('sellingPrice').optional().isFloat({ min: 0 }).withMessage('sellingPrice must be positive'),
-  body('stock').optional().isInt({ min: 0 }).withMessage('stock must be non-negative'),
+  body('stock').not().exists().withMessage('Use the stock module to change inventory.'),
+  body('availableColors').optional().isArray().withMessage('availableColors must be an array'),
+  body('trackingType').optional().isIn(['IMEI', 'SERIAL', 'QUANTITY']).withMessage('Invalid trackingType'),
 
   async (req, res, next) => {
     try {
@@ -208,9 +218,16 @@ const updateProduct = [
         }
       }
 
+      const updateBody = { ...req.body };
+      if (req.body.internalCode !== undefined || req.body.sku !== undefined) {
+        updateBody.internalCode = req.body.internalCode || req.body.sku;
+        updateBody.sku = req.body.sku || req.body.internalCode;
+      }
+      delete updateBody.stock;
+
       const product = await Product.findByIdAndUpdate(
         req.params.id,
-        { $set: req.body },
+        { $set: updateBody },
         { new: true, runValidators: true }
       ).populate('categoryId', 'name slug');
 
@@ -255,8 +272,14 @@ const getProductByBarcode = async (req, res, next) => {
   try {
     const { code } = req.params;
     
-    // First, check if it's a product barcode
-    let product = await Product.findOne({ barcode: code })
+    // First, check exact product-level identifiers.
+    let product = await Product.findOne({
+      $or: [
+        { barcode: code },
+        { sku: code },
+        { internalCode: code },
+      ],
+    })
       .populate('categoryId', 'name slug');
       
     let identifierItem = null;
@@ -264,11 +287,25 @@ const getProductByBarcode = async (req, res, next) => {
     // If not found, check if it's an IMEI or Serial Number
     if (!product) {
       const ProductItem = require('../models/ProductItem');
-      identifierItem = await ProductItem.findOne({ code, status: 'IN_STOCK' });
+      identifierItem = await ProductItem.findOne({ code });
       if (identifierItem) {
+        if (identifierItem.status !== 'IN_STOCK') {
+          return errorResponse(
+            res,
+            `Inventory item "${code}" is already ${identifierItem.status.toLowerCase().replace('_', ' ')}.`,
+            409
+          );
+        }
         product = await Product.findById(identifierItem.productId)
           .populate('categoryId', 'name slug');
       }
+    }
+
+    if (!product) {
+      product = await Product.findOne({
+        name: { $regex: code, $options: 'i' },
+        isActive: true,
+      }).populate('categoryId', 'name slug');
     }
 
     if (!product) {

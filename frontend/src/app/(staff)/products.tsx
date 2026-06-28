@@ -45,19 +45,34 @@ export default function StaffProductsScreen() {
       <View style={[styles.headerContainer, { paddingTop: insets.top + 8, backgroundColor: colors.background }]}>
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.foreground }]}>Products</Text>
-          <Pressable
-            style={({ pressed }) => [
-              styles.fab,
-              { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }
-            ]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.push("/staff/add-product");
-            }}
-          >
-            <Ionicons name="add" size={16} color="#000" />
-            <Text style={styles.fabText}>Add</Text>
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.stockBtn,
+                { backgroundColor: colors.bg3, borderColor: colors.border2, opacity: pressed ? 0.8 : 1 }
+              ]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/staff/add-stock" as any);
+              }}
+            >
+              <Ionicons name="cube-outline" size={15} color={colors.primary} />
+              <Text style={[styles.stockBtnText, { color: colors.primary }]}>Stock</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [
+                styles.fab,
+                { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }
+              ]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/staff/add-product");
+              }}
+            >
+              <Ionicons name="add" size={16} color="#000" />
+              <Text style={styles.fabText}>Add</Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.searchRow}>
@@ -149,6 +164,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 8,
   },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  stockBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 24,
+    borderWidth: 1,
+  },
+  stockBtnText: { fontWeight: "700", fontFamily: "Inter_700Bold", fontSize: 12 },
   title: { fontSize: 24, fontWeight: "800", fontFamily: "Inter_700Bold", letterSpacing: -0.5 },
   fab: {
     flexDirection: "row",

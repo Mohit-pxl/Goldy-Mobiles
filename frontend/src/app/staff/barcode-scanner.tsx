@@ -104,7 +104,10 @@ export default function BarcodeScannerScreen() {
     if (isRawMode) {
       if (returnPath) {
         const params: any = { scannedBarcode: selectedCodeData };
-        if (productId) params.id = productId;
+        if (productId) {
+          params.id = productId;
+          params.productId = productId;
+        }
         router.navigate({ pathname: returnPath as any, params });
       } else {
         router.canGoBack() ? router.back() : router.replace('/');

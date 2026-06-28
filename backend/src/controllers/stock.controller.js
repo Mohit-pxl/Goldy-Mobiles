@@ -16,6 +16,7 @@ const createMovement = [
   body('qty').isInt({ min: 1 }).withMessage('quantity must be a positive integer'),
   body('note').optional().trim(),
   body('identifiers').optional().isArray().withMessage('Identifiers must be an array'),
+  body('items').optional().isArray().withMessage('items must be an array'),
 
   async (req, res, next) => {
     try {
@@ -24,39 +25,61 @@ const createMovement = [
         return errorResponse(res, 'Validation failed.', 400, errors.array());
       }
 
-      const { productId, type, qty, note, identifiers } = req.body;
+      const { productId, type, qty, note, identifiers, items } = req.body;
       const Product = require('../models/Product');
       const ProductItem = require('../models/ProductItem');
 
       const product = await Product.findById(productId);
       if (!product) return errorResponse(res, 'Product not found.', 404);
 
-      if ((product.trackImei || product.trackSerial) && type === 'in') {
-        if (!identifiers || identifiers.length !== qty) {
+      const normalizedTrackingType = product.trackingType || (product.trackImei ? 'IMEI' : product.trackSerial ? 'SERIAL' : 'QUANTITY');
+      const isTracked = normalizedTrackingType === 'IMEI' || normalizedTrackingType === 'SERIAL';
+      const trackedItems = Array.isArray(items) && items.length > 0
+        ? items.map((item) => ({
+            code: String(item.code || '').trim(),
+            color: item.color ? String(item.color).trim() : undefined,
+          }))
+        : (identifiers || []).map((code) => ({ code: String(code || '').trim() }));
+      const cleanCodes = trackedItems.map((item) => item.code).filter(Boolean);
+
+      if (isTracked && type === 'in') {
+        if (cleanCodes.length !== qty) {
           return errorResponse(res, `This product requires exactly ${qty} ${product.trackImei ? 'IMEIs' : 'Serial Numbers'}.`, 400);
+        }
+
+        const duplicateInRequest = cleanCodes.find((code, index) => cleanCodes.indexOf(code) !== index);
+        if (duplicateInRequest) {
+          return errorResponse(res, `Duplicate identifier in this stock entry: ${duplicateInRequest}`, 400);
         }
         
         // Ensure uniqueness before adding
-        const existingItems = await ProductItem.find({ code: { $in: identifiers } });
+        const existingItems = await ProductItem.find({ code: { $in: cleanCodes } });
         if (existingItems.length > 0) {
           const dups = existingItems.map(i => i.code).join(', ');
           return errorResponse(res, `Identifiers already exist in system: ${dups}`, 400);
         }
         
-        const itemsToInsert = identifiers.map(code => ({
+        const itemsToInsert = trackedItems.map(item => ({
           productId,
-          code,
-          type: product.trackImei ? 'IMEI' : 'SERIAL',
+          code: item.code,
+          color: item.color,
+          type: normalizedTrackingType,
           status: 'IN_STOCK',
           addedBy: req.user._id
         }));
         await ProductItem.insertMany(itemsToInsert);
-      } else if ((product.trackImei || product.trackSerial) && type === 'out') {
-        // Need to mark out specifically... this will be tricky for manual out, maybe limit it or require specific identifiers.
-        // For now, if manual out, we might require identifiers, but let's just do it for 'in' as requested by the Add Stock screen.
-        if (identifiers && identifiers.length === qty) {
-          await ProductItem.updateMany({ code: { $in: identifiers } }, { $set: { status: 'RETURNED' } });
+      } else if (isTracked && type === 'out') {
+        if (cleanCodes.length !== qty) {
+          return errorResponse(res, `Manual out movements require exactly ${qty} ${normalizedTrackingType === 'IMEI' ? 'IMEIs' : 'Serial Numbers'}.`, 400);
         }
+        const availableItems = await ProductItem.find({ productId, code: { $in: cleanCodes }, status: 'IN_STOCK' });
+        if (availableItems.length !== qty) {
+          return errorResponse(res, 'One or more identifiers are invalid or already sold.', 400);
+        }
+        await ProductItem.updateMany(
+          { productId, code: { $in: cleanCodes }, status: 'IN_STOCK' },
+          { $set: { status: 'DEFECTIVE' } }
+        );
       }
 
       const movement = await createStockMovement({

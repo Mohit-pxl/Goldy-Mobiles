@@ -19,6 +19,27 @@ const productSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    subcategory: {
+      type: String,
+      trim: true,
+    },
+    model: {
+      type: String,
+      trim: true,
+    },
+    variant: {
+      type: String,
+      trim: true,
+    },
+    availableColors: {
+      type: [String],
+      default: [],
+    },
+    trackingType: {
+      type: String,
+      enum: ['IMEI', 'SERIAL', 'QUANTITY'],
+      default: 'QUANTITY',
+    },
     specifications: [
       {
         key: String,
@@ -62,6 +83,10 @@ const productSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    sku: {
+      type: String,
+      trim: true,
+    },
     hsnCode: {
       type: String,
       trim: true,
@@ -101,8 +126,28 @@ const productSchema = new mongoose.Schema(
 productSchema.index({ name: 'text', brand: 'text', description: 'text' });
 productSchema.index({ categoryId: 1 });
 productSchema.index({ category: 1 });
+productSchema.index({ subcategory: 1 });
 productSchema.index({ brand: 1 });
 productSchema.index({ sellingPrice: 1 });
 productSchema.index({ isActive: 1 });
+productSchema.index({ sku: 1 });
+productSchema.index({ internalCode: 1 });
+
+productSchema.pre('validate', function syncTrackingFlags(next) {
+  if (this.trackingType) {
+    this.trackImei = this.trackingType === 'IMEI';
+    this.trackSerial = this.trackingType === 'SERIAL';
+  } else if (this.trackImei) {
+    this.trackingType = 'IMEI';
+  } else if (this.trackSerial) {
+    this.trackingType = 'SERIAL';
+  } else {
+    this.trackingType = 'QUANTITY';
+  }
+
+  if (!this.sku && this.internalCode) this.sku = this.internalCode;
+  if (!this.internalCode && this.sku) this.internalCode = this.sku;
+  next();
+});
 
 module.exports = mongoose.model('Product', productSchema);
