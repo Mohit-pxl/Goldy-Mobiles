@@ -24,7 +24,6 @@ const productItemSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['IN_STOCK', 'SOLD', 'RETURNED', 'DEFECTIVE'],
       default: 'IN_STOCK',
     },
     invoiceId: {

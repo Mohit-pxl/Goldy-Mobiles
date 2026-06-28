@@ -47,6 +47,7 @@ export default function BarcodeScannerScreen() {
   const [error, setError] = useState<string | null>(null);
   const [torch, setTorch] = useState(false);
   const codesMapRef = useRef<Map<string, ScannedCode>>(new Map());
+  const badCodesRef = useRef<Set<string>>(new Set());
 
   // Determine category based on string pattern
   const categorizeCode = (data: string, type: string): Omit<ScannedCode, "data" | "type" | "isRecommended"> => {
@@ -66,7 +67,7 @@ export default function BarcodeScannerScreen() {
   };
 
   const handleBarCodeScanned = ({ data, type }: { data: string; type: string }) => {
-    if (!isScanning) return;
+    if (!isScanning || badCodesRef.current.has(data)) return;
 
     if (!codesMapRef.current.has(data)) {
       const info = categorizeCode(data, type);
@@ -139,14 +140,17 @@ export default function BarcodeScannerScreen() {
       router.canGoBack() ? router.back() : router.replace('/');
     } catch {
       setError(`No product found for barcode "${dataToUse}"`);
+      badCodesRef.current.add(dataToUse); // Add to bad codes to avoid retry loop
+      
       setTimeout(() => {
+        // Clear this bad code so we can auto-submit the next one!
+        codesMapRef.current.delete(dataToUse);
+        setDetectedCodes(Array.from(codesMapRef.current.values()));
+        setSelectedCodeData(null);
+        
         setIsScanning(true);
         setResolving(false);
-        setError(null);
-        codesMapRef.current.clear();
-        setDetectedCodes([]);
-        setSelectedCodeData(null);
-      }, 2000);
+      }, 1000);
     } finally {
       setResolving(false);
     }
@@ -155,6 +159,7 @@ export default function BarcodeScannerScreen() {
   const resetScan = () => {
     setIsScanning(true);
     codesMapRef.current.clear();
+    badCodesRef.current.clear();
     setDetectedCodes([]);
     setSelectedCodeData(null);
     setError(null);

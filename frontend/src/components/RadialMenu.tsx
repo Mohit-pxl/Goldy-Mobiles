@@ -1,14 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import {
   Animated,
   Dimensions,
   Easing,
-  Modal,
+  PanResponder,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -16,7 +15,7 @@ import {
 
 import { useColors } from "@/hooks/useColors";
 
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get("window");
 
 export interface RadialOption {
   id: string;
@@ -33,16 +32,27 @@ interface RadialMenuProps {
 export default function RadialMenu({ options }: RadialMenuProps) {
   const colors = useColors();
   const [isOpen, setIsOpen] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [btnPos, setBtnPos] = useState({ x: 0, y: 0 });
+  const buttonRef = useRef<View>(null);
+  
   const anim = useRef(new Animated.Value(0)).current;
+  const selectedIndexRef = useRef<number | null>(null);
+  
+  const angleStep = (2 * Math.PI) / options.length;
+  const optionAngles = options.map((_, i) => i * angleStep - Math.PI / 2);
 
   const openMenu = () => {
+    buttonRef.current?.measureInWindow((x, y) => {
+      setBtnPos({ x, y });
+    });
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setIsOpen(true);
     Animated.timing(anim, {
       toValue: 1,
-      duration: 300,
+      duration: 250,
       easing: Easing.out(Easing.back(1.5)),
-      useNativeDriver: true,
+      useNativeDriver: false, // Need false for layout animation if we used it, but we use transform so true is fine, wait let's use true
     }).start();
   };
 
@@ -51,66 +61,100 @@ export default function RadialMenu({ options }: RadialMenuProps) {
       toValue: 0,
       duration: 200,
       easing: Easing.in(Easing.ease),
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start(() => {
       setIsOpen(false);
       if (callback) callback();
     });
   };
 
-  const handleSelect = (option: RadialOption) => {
-    Haptics.selectionAsync();
-    closeMenu(() => option.onSelect());
-  };
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        selectedIndexRef.current = null;
+        setSelectedIndex(null);
+        openMenu();
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const { dx, dy } = gestureState;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance > 30) {
+          const angle = Math.atan2(dy, dx);
+          
+          // Find closest option angle
+          let minDiff = Infinity;
+          let bestIndex = 0;
+          
+          optionAngles.forEach((optAngle, i) => {
+            // Normalize angle difference to [-pi, pi]
+            let diff = angle - optAngle;
+            while (diff > Math.PI) diff -= 2 * Math.PI;
+            while (diff < -Math.PI) diff += 2 * Math.PI;
+            diff = Math.abs(diff);
+            
+            if (diff < minDiff) {
+              minDiff = diff;
+              bestIndex = i;
+            }
+          });
+          
+          if (selectedIndexRef.current !== bestIndex) {
+            Haptics.selectionAsync();
+            selectedIndexRef.current = bestIndex;
+            setSelectedIndex(bestIndex);
+          }
+        } else {
+          if (selectedIndexRef.current !== null) {
+            selectedIndexRef.current = null;
+            setSelectedIndex(null);
+          }
+        }
+      },
+      onPanResponderRelease: () => {
+        const selected = selectedIndexRef.current;
+        if (selected !== null) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          closeMenu(() => options[selected].onSelect());
+        } else {
+          closeMenu();
+        }
+      },
+      onPanResponderTerminate: () => {
+        closeMenu();
+      },
+    })
+  ).current;
 
-  const radius = 100; // Distance of items from center
-  const angleStep = (2 * Math.PI) / options.length;
+  const radius = 100;
 
   return (
-    <>
-      <Pressable
-        onLongPress={openMenu}
-        onPress={openMenu} // Also open on tap for accessibility
-        style={({ pressed }) => [
+    <View style={{ zIndex: isOpen ? 999 : 1 }} ref={buttonRef}>
+      <View
+        {...panResponder.panHandlers}
+        style={[
           styles.mainBtn,
-          { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 },
+          { backgroundColor: colors.primary, opacity: isOpen ? 0.8 : 1 },
         ]}
       >
         <Ionicons name="apps" size={20} color="#000" />
         <Text style={styles.mainBtnText}>Actions</Text>
-      </Pressable>
+      </View>
 
-      <Modal visible={isOpen} transparent animationType="none" onRequestClose={() => closeMenu()}>
-        <View style={styles.modalRoot}>
-          {Platform.OS === "ios" ? (
-            <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
-          ) : (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.7)" }]} />
-          )}
-
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => closeMenu()} />
-
-          <View style={styles.centerContainer} pointerEvents="box-none">
-            {/* Center Close Button */}
-            <Animated.View
-              style={[
-                styles.centerBtn,
-                {
-                  transform: [
-                    { scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }) },
-                    { rotate: anim.interpolate({ inputRange: [0, 1], outputRange: ["-90deg", "0deg"] }) }
-                  ],
-                },
-              ]}
-            >
-              <Pressable onPress={() => closeMenu()} hitSlop={20}>
-                <Ionicons name="close" size={32} color="#fff" />
-              </Pressable>
-            </Animated.View>
-
+      {isOpen && (
+        <View style={styles.overlayWrapper} pointerEvents="none">
+          <View style={[styles.centerContainer, {
+             position: 'absolute',
+             left: (width / 2) - btnPos.x - 125, // 125 is half of 250 (centerContainer width)
+             top: (height / 2) - btnPos.y - 125,
+          }]}>
             {/* Radial Options */}
             {options.map((opt, i) => {
-              const angle = i * angleStep - Math.PI / 2; // Start from top (-90 deg)
+              const angle = optionAngles[i];
+              const isSelected = selectedIndex === i;
+              
               const translateX = anim.interpolate({
                 inputRange: [0, 1],
                 outputRange: [0, radius * Math.cos(angle)],
@@ -120,12 +164,12 @@ export default function RadialMenu({ options }: RadialMenuProps) {
                 outputRange: [0, radius * Math.sin(angle)],
               });
               const scale = anim.interpolate({
-                inputRange: [0, 0.5, 1],
-                outputRange: [0.5, 1.2, 1],
+                inputRange: [0, 1],
+                outputRange: [0.5, isSelected ? 1.3 : 1],
               });
               const opacity = anim.interpolate({
                 inputRange: [0, 0.5, 1],
-                outputRange: [0, 1, 1],
+                outputRange: [0, 1, isSelected ? 1 : 0.8],
               });
 
               return (
@@ -139,20 +183,17 @@ export default function RadialMenu({ options }: RadialMenuProps) {
                     },
                   ]}
                 >
-                  <Pressable
-                    style={[styles.optionBtn, { backgroundColor: opt.color }]}
-                    onPress={() => handleSelect(opt)}
-                  >
-                    <Ionicons name={opt.icon} size={24} color="#fff" />
-                  </Pressable>
-                  <Text style={styles.optionLabel}>{opt.label}</Text>
+                  <View style={[styles.optionBtn, { backgroundColor: isSelected ? opt.color : colors.bg4, borderColor: isSelected ? "#fff" : "transparent", borderWidth: isSelected ? 2 : 0 }]}>
+                    <Ionicons name={opt.icon} size={24} color={isSelected ? "#fff" : colors.text2} />
+                  </View>
+                  <Text style={[styles.optionLabel, { color: isSelected ? opt.color : colors.text2 }]}>{opt.label}</Text>
                 </Animated.View>
               );
             })}
           </View>
         </View>
-      </Modal>
-    </>
+      )}
+    </View>
   );
 }
 
@@ -176,28 +217,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#000",
   },
-  modalRoot: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+  overlayWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    zIndex: 9999,
   },
   centerContainer: {
     width: 250,
     height: 250,
     justifyContent: "center",
     alignItems: "center",
-  },
-  centerBtn: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    justifyContent: "center",
-    alignItems: "center",
-    position: "absolute",
-    zIndex: 10,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.3)",
   },
   optionContainer: {
     position: "absolute",

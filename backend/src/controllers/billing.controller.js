@@ -142,14 +142,6 @@ const createInvoice = [
         product.stock -= item.qty;
         await product.save();
 
-        if ((trackingType === 'IMEI' || trackingType === 'SERIAL') && item.identifiers && item.identifiers.length > 0) {
-          // Delete sold product items from inventory per user request
-          await ProductItem.deleteMany({
-            code: { $in: item.identifiers },
-            productId: product._id
-          });
-        }
-
         // Write stock movement
         await StockMovement.create(
           [
@@ -197,17 +189,16 @@ const createInvoice = [
         ]
       );
 
-      // Update ProductItems to SOLD and set invoiceId
+      // Delete sold ProductItems from DB as requested
       const allIdentifiers = invoiceItems.flatMap(i => i.identifiers);
       if (allIdentifiers.length > 0) {
         const ProductItem = require('../models/ProductItem');
-        const updateResult = await ProductItem.updateMany(
-          { code: { $in: allIdentifiers }, status: 'IN_STOCK' },
-          { $set: { status: 'SOLD', invoiceId: invoice._id } }
+        const deleteResult = await ProductItem.deleteMany(
+          { code: { $in: allIdentifiers } }
         );
-        const modified = updateResult.modifiedCount ?? updateResult.nModified;
-        if (modified !== allIdentifiers.length) {
-          return errorResponse(res, 'One or more inventory items were already sold before the invoice could be finalized.', 409);
+        const deleted = deleteResult.deletedCount;
+        if (deleted !== allIdentifiers.length) {
+          return errorResponse(res, 'One or more inventory items were already sold/deleted before the invoice could be finalized.', 409);
         }
       }
 
