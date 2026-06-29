@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Pressable,
 } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
@@ -42,18 +43,22 @@ export default function RadialMenu({ options }: RadialMenuProps) {
   const angleStep = (2 * Math.PI) / options.length;
   const optionAngles = options.map((_, i) => i * angleStep - Math.PI / 2);
 
-  const openMenu = () => {
-    buttonRef.current?.measureInWindow((x, y) => {
-      setBtnPos({ x, y });
-    });
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    setIsOpen(true);
-    Animated.timing(anim, {
-      toValue: 1,
-      duration: 250,
-      easing: Easing.out(Easing.back(1.5)),
-      useNativeDriver: false, // Need false for layout animation if we used it, but we use transform so true is fine, wait let's use true
-    }).start();
+  const toggleMenu = () => {
+    if (isOpen) {
+      closeMenu();
+    } else {
+      buttonRef.current?.measureInWindow((x, y) => {
+        setBtnPos({ x, y });
+      });
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setIsOpen(true);
+      Animated.timing(anim, {
+        toValue: 1,
+        duration: 250,
+        easing: Easing.out(Easing.back(1.5)),
+        useNativeDriver: false,
+      }).start();
+    }
   };
 
   const closeMenu = (callback?: () => void) => {
@@ -64,96 +69,36 @@ export default function RadialMenu({ options }: RadialMenuProps) {
       useNativeDriver: false,
     }).start(() => {
       setIsOpen(false);
+      setSelectedIndex(null);
       if (callback) callback();
     });
   };
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        selectedIndexRef.current = null;
-        setSelectedIndex(null);
-        openMenu();
-      },
-      onPanResponderMove: (_, gestureState) => {
-        const { dx, dy } = gestureState;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        if (distance > 30) {
-          const angle = Math.atan2(dy, dx);
-          
-          // Find closest option angle
-          let minDiff = Infinity;
-          let bestIndex = 0;
-          
-          optionAngles.forEach((optAngle, i) => {
-            // Normalize angle difference to [-pi, pi]
-            let diff = angle - optAngle;
-            while (diff > Math.PI) diff -= 2 * Math.PI;
-            while (diff < -Math.PI) diff += 2 * Math.PI;
-            diff = Math.abs(diff);
-            
-            if (diff < minDiff) {
-              minDiff = diff;
-              bestIndex = i;
-            }
-          });
-          
-          if (selectedIndexRef.current !== bestIndex) {
-            Haptics.selectionAsync();
-            selectedIndexRef.current = bestIndex;
-            setSelectedIndex(bestIndex);
-          }
-        } else {
-          if (selectedIndexRef.current !== null) {
-            selectedIndexRef.current = null;
-            setSelectedIndex(null);
-          }
-        }
-      },
-      onPanResponderRelease: () => {
-        const selected = selectedIndexRef.current;
-        if (selected !== null) {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          closeMenu(() => options[selected].onSelect());
-        } else {
-          closeMenu();
-        }
-      },
-      onPanResponderTerminate: () => {
-        closeMenu();
-      },
-    })
-  ).current;
 
   const radius = 100;
 
   return (
     <View style={{ zIndex: isOpen ? 999 : 1 }} ref={buttonRef}>
-      <View
-        {...panResponder.panHandlers}
+      <Pressable
+        onPress={toggleMenu}
         style={[
           styles.mainBtn,
           { backgroundColor: colors.primary, opacity: isOpen ? 0.8 : 1 },
         ]}
       >
-        <Ionicons name="apps" size={20} color="#000" />
-        <Text style={styles.mainBtnText}>Actions</Text>
-      </View>
+        <Ionicons name={isOpen ? "close" : "apps"} size={20} color="#000" />
+        <Text style={styles.mainBtnText}>{isOpen ? "Close" : "Actions"}</Text>
+      </Pressable>
 
       {isOpen && (
-        <View style={styles.overlayWrapper} pointerEvents="none">
+        <View style={styles.overlayWrapper} pointerEvents="box-none">
           <View style={[styles.centerContainer, {
              position: 'absolute',
              left: (width / 2) - btnPos.x - 125, // 125 is half of 250 (centerContainer width)
              top: (height / 2) - btnPos.y - 125,
-          }]}>
+          }]} pointerEvents="box-none">
             {/* Radial Options */}
             {options.map((opt, i) => {
               const angle = optionAngles[i];
-              const isSelected = selectedIndex === i;
               
               const translateX = anim.interpolate({
                 inputRange: [0, 1],
@@ -165,11 +110,11 @@ export default function RadialMenu({ options }: RadialMenuProps) {
               });
               const scale = anim.interpolate({
                 inputRange: [0, 1],
-                outputRange: [0.5, isSelected ? 1.3 : 1],
+                outputRange: [0.5, 1],
               });
               const opacity = anim.interpolate({
                 inputRange: [0, 0.5, 1],
-                outputRange: [0, 1, isSelected ? 1 : 0.8],
+                outputRange: [0, 1, 1],
               });
 
               return (
@@ -183,10 +128,18 @@ export default function RadialMenu({ options }: RadialMenuProps) {
                     },
                   ]}
                 >
-                  <View style={[styles.optionBtn, { backgroundColor: isSelected ? opt.color : colors.bg4, borderColor: isSelected ? "#fff" : "transparent", borderWidth: isSelected ? 2 : 0 }]}>
-                    <Ionicons name={opt.icon} size={24} color={isSelected ? "#fff" : colors.text2} />
-                  </View>
-                  <Text style={[styles.optionLabel, { color: isSelected ? opt.color : colors.text2 }]}>{opt.label}</Text>
+                  <Pressable 
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      closeMenu(() => opt.onSelect());
+                    }}
+                    style={{ alignItems: "center" }}
+                  >
+                    <View style={[styles.optionBtn, { backgroundColor: colors.bg4 }]}>
+                      <Ionicons name={opt.icon} size={24} color={colors.text2} />
+                    </View>
+                    <Text style={[styles.optionLabel, { color: colors.text2 }]}>{opt.label}</Text>
+                  </Pressable>
                 </Animated.View>
               );
             })}

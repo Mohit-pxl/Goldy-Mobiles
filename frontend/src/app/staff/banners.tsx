@@ -224,7 +224,9 @@ export default function BannersManagementScreen() {
               <View style={[styles.bannerCard, { backgroundColor: colors.bg2, borderColor: colors.border }]}>
                 <Image source={{ uri: item.imageUrl }} style={styles.bannerImg} resizeMode="cover" />
                 <View style={styles.bannerRow}>
-                  <Text style={[styles.bannerUrl, { color: colors.text2 }]} numberOfLines={1}>{item.imageUrl}</Text>
+                  <Text style={[styles.bannerUrl, { color: colors.text2 }]} numberOfLines={1}>
+                    {item.imageUrl.startsWith("data:image") ? "Base64 Image Data" : item.imageUrl}
+                  </Text>
                   <Pressable onPress={() => handleDelete(item._id)} style={[styles.delBtn, { backgroundColor: colors.destructive + '22' }]}>
                     <Ionicons name="trash-outline" size={16} color={colors.destructive} />
                   </Pressable>
