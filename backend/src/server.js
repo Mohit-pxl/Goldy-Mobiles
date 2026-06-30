@@ -4,12 +4,16 @@ const app = require('./app');
 const connectDB = require('./config/db');
 const cron = require('node-cron');
 const logger = require('./utils/logger');
+const errorHandler = require('./middleware/error.middleware');
+const startDueNotificationsJob = require('./jobs/dueNotifications');
 
 const PORT = process.env.PORT || 5000;
 
 // ── Connect to MongoDB and start server ──────────────────────────────────────
 const startServer = async () => {
   await connectDB();
+
+  startDueNotificationsJob();
 
   app.listen(PORT, () => {
     logger.info(`Server running on port ${PORT}`);

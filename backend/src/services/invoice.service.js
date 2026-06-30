@@ -125,18 +125,33 @@ const generateInvoicePDF = (invoice, stream) => {
 
     doc.font('Helvetica-Bold').fontSize(12);
     doc.text('Total:', totalsX, y);
-    doc.text(`₹${invoice.totalAmount.toFixed(2)}`, col.total, y);
+    doc.text(`₹${(invoice.total || 0).toFixed(2)}`, col.total, y);
     y += 22;
 
     doc.font('Helvetica').fontSize(10);
     doc.text('Paid:', totalsX, y);
-    doc.text(`₹${invoice.paidAmount.toFixed(2)}`, col.total, y);
+    doc.text(`₹${(invoice.paidAmount || 0).toFixed(2)}`, col.total, y);
     y += 18;
 
     if (invoice.dueAmount > 0) {
       doc.fillColor('red').font('Helvetica-Bold');
       doc.text('Due:', totalsX, y);
       doc.text(`₹${invoice.dueAmount.toFixed(2)}`, col.total, y);
+      y += 18;
+      
+      if (invoice.dueDate) {
+         doc.text('Due Date:', totalsX, y);
+         doc.text(
+           new Date(invoice.dueDate).toLocaleDateString('en-IN', {
+             day: '2-digit',
+             month: 'short',
+             year: 'numeric',
+           }),
+           col.total,
+           y
+         );
+         y += 18;
+      }
       doc.fillColor('black').font('Helvetica');
     }
 

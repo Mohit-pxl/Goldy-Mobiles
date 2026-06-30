@@ -12,6 +12,7 @@ import {
   TextInput,
   View,
   Platform,
+  Modal,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -48,6 +49,18 @@ export default function BillingScreen() {
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("cash");
   const [placing, setPlacing] = useState<null | "paid" | "unpaid">(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
+
+  // Unpaid Modal State
+  const [showUnpaidModal, setShowUnpaidModal] = useState(false);
+  const [unpaidDueDate, setUnpaidDueDate] = useState<string>(""); // YYYY-MM-DD
+  const [unpaidDeposit, setUnpaidDeposit] = useState<string>("");
+  const [unpaidPaymentMode, setUnpaidPaymentMode] = useState<PaymentMode>("cash");
+
+  const getFutureDate = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return d.toISOString().split("T")[0];
+  };
 
   const { data: recentInvoices = [] } = useQuery<Invoice[]>({
     queryKey: ["invoices"],
@@ -137,6 +150,15 @@ export default function BillingScreen() {
       Alert.alert("Customer required", "Unpaid invoices must be linked to a customer account.");
       return;
     }
+    
+    if (paymentStatus === "unpaid" && !showUnpaidModal) {
+      // First show the modal to get details
+      setUnpaidDueDate(getFutureDate(7));
+      setUnpaidDeposit("");
+      setShowUnpaidModal(true);
+      return;
+    }
+
     setPlacing(paymentStatus);
     try {
       if (isQuotationMode) {
@@ -165,12 +187,15 @@ export default function BillingScreen() {
             price: i.product.sellingPrice,
             identifiers: i.identifiers
           })),
-          paymentMode: paymentStatus === "unpaid" ? "credit" : paymentMode,
+          paymentMode: paymentStatus === "unpaid" ? unpaidPaymentMode : paymentMode,
           paymentStatus,
+          ...(paymentStatus === "unpaid" && unpaidDeposit ? { depositAmount: parseFloat(unpaidDeposit) } : {}),
+          ...(paymentStatus === "unpaid" && unpaidDueDate ? { dueDate: new Date(unpaidDueDate).toISOString() } : {}),
           ...(customer ? { customerId: customer._id } : {}),
         });
         clearCart();
         setCustomer(null);
+        setShowUnpaidModal(false);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         router.replace(`/staff/invoice/${res.data._id}`);
       }
@@ -565,6 +590,106 @@ export default function BillingScreen() {
           )}
         </View>
       )}
+
+      {/* ── Unpaid Details Modal ── */}
+      <Modal
+        visible={showUnpaidModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowUnpaidModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Unpaid Bill Details</Text>
+            <Text style={[styles.modalSub, { color: colors.text3 }]}>Set a due date and initial deposit</Text>
+
+            <View style={{ marginTop: 16, gap: 16 }}>
+              <View>
+                <Text style={[styles.sectionLabel, { color: colors.text3, paddingHorizontal: 0 }]}>Due Date (YYYY-MM-DD)</Text>
+                <View style={[styles.searchBox, { backgroundColor: colors.bg4, marginTop: 8 }]}>
+                  <TextInput
+                    style={[styles.searchInput, { color: colors.foreground }]}
+                    value={unpaidDueDate}
+                    onChangeText={setUnpaidDueDate}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor={colors.text3}
+                  />
+                </View>
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+                  <Pressable style={[styles.quickDateBtn, { borderColor: colors.border2 }]} onPress={() => setUnpaidDueDate(getFutureDate(7))}>
+                    <Text style={{ color: colors.text2, fontSize: 12 }}>1 Week</Text>
+                  </Pressable>
+                  <Pressable style={[styles.quickDateBtn, { borderColor: colors.border2 }]} onPress={() => setUnpaidDueDate(getFutureDate(30))}>
+                    <Text style={{ color: colors.text2, fontSize: 12 }}>1 Month</Text>
+                  </Pressable>
+                </View>
+              </View>
+
+              <View>
+                <Text style={[styles.sectionLabel, { color: colors.text3, paddingHorizontal: 0 }]}>Deposit Amount (Today)</Text>
+                <View style={[styles.searchBox, { backgroundColor: colors.bg4, marginTop: 8 }]}>
+                  <Text style={{ color: colors.text3 }}>₹</Text>
+                  <TextInput
+                    style={[styles.searchInput, { color: colors.foreground }]}
+                    value={unpaidDeposit}
+                    onChangeText={setUnpaidDeposit}
+                    placeholder="0"
+                    placeholderTextColor={colors.text3}
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+
+              {parseFloat(unpaidDeposit) > 0 && (
+                <View>
+                  <Text style={[styles.sectionLabel, { color: colors.text3, paddingHorizontal: 0 }]}>Deposit Method</Text>
+                  <View style={[styles.paymentGrid, { marginTop: 8 }]}>
+                    {PAYMENT_MODES.filter(m => m !== 'credit').map((mode) => (
+                      <Pressable
+                        key={mode}
+                        style={[
+                          styles.payBtn,
+                          {
+                            backgroundColor: unpaidPaymentMode === mode ? colors.primary : colors.bg3,
+                            borderColor: unpaidPaymentMode === mode ? colors.primary : colors.border2,
+                          },
+                        ]}
+                        onPress={() => setUnpaidPaymentMode(mode)}
+                      >
+                        <Text style={styles.payBtnEmoji}>{MODE_ICONS[mode]}</Text>
+                        <Text style={[styles.payBtnLabel, { color: unpaidPaymentMode === mode ? "#000" : colors.text2 }]}>
+                          {mode.toUpperCase()}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </View>
+
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 24 }}>
+              <Pressable
+                style={[styles.placeBtnOutline, { borderColor: colors.border, flex: 1 }]}
+                onPress={() => setShowUnpaidModal(false)}
+                disabled={!!placing}
+              >
+                <Text style={[styles.placeBtnOutlineText, { color: colors.text2 }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.placeBtnFill, { backgroundColor: colors.primary, flex: 2 }]}
+                onPress={() => handlePlaceOrder("unpaid")}
+                disabled={!!placing}
+              >
+                {placing === "unpaid" ? (
+                  <ActivityIndicator color="#000" />
+                ) : (
+                  <Text style={[styles.placeBtnText, { color: "#000" }]}>Save Unpaid Bill</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -742,4 +867,24 @@ const styles = StyleSheet.create({
   recentSub: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 3 },
   recentRight: { flexDirection: "row", alignItems: "center", gap: 4 },
   recentTotal: { fontSize: 13, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    borderTopWidth: 1,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 40,
+  },
+  modalTitle: { fontSize: 20, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  modalSub: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 4 },
+  quickDateBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
 });

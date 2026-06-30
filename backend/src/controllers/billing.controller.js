@@ -34,6 +34,8 @@ const createInvoice = [
   body('paymentStatus').optional().isIn(['paid', 'unpaid']),
   body('discount').optional().isFloat({ min: 0 }).withMessage('Discount must be non-negative'),
   body('paidAmount').optional().isFloat({ min: 0 }).withMessage('paidAmount must be non-negative'),
+  body('depositAmount').optional().isFloat({ min: 0 }).withMessage('depositAmount must be non-negative'),
+  body('dueDate').optional().isISO8601().toDate().withMessage('dueDate must be a valid date'),
   body('customerId').optional().isMongoId().withMessage('Invalid customerId'),
 
   async (req, res, next) => {
@@ -53,6 +55,8 @@ const createInvoice = [
         customerId: bodyCustomerId,
         customerName: bodyCustomerName,
         customerPhone: bodyCustomerPhone,
+        dueDate,
+        depositAmount,
       } = req.body;
 
       const customerId = bodyCustomerId || (customer && customer._id);
@@ -159,7 +163,7 @@ const createInvoice = [
       const total = subtotal + totalCgst + totalSgst - discount;
       const gstAmount = totalCgst + totalSgst;
       const paidAmount =
-        rawPaidAmount !== undefined ? rawPaidAmount : total;
+        paymentStatus === 'unpaid' ? (depositAmount || 0) : (rawPaidAmount !== undefined ? rawPaidAmount : total);
       const dueAmount = Math.max(0, total - paidAmount);
 
       // Generate invoice number
@@ -181,6 +185,8 @@ const createInvoice = [
             paymentStatus,
             paidAmount,
             dueAmount,
+            dueDate,
+            depositAmount: depositAmount || 0,
             customerId: customerId || undefined,
             customerName,
             customerPhone,
@@ -189,16 +195,16 @@ const createInvoice = [
         ]
       );
 
-      // Auto-create CashTransaction for non-credit sales
-      if (paymentMode !== 'credit') {
+      // Auto-create CashTransaction for non-credit sales or deposit payments
+      if (paymentMode !== 'credit' && paidAmount > 0) {
         const CashTransaction = require('../models/CashTransaction');
         const cashTxType = paymentMode === 'cash' ? 'cash_sale' : 'bank_sale';
         
         await CashTransaction.create([{
           type: cashTxType,
-          amount: total,
+          amount: paidAmount,
           refInvoiceId: invoice._id,
-          note: `${cashTxType === 'cash_sale' ? 'Cash' : paymentMode.toUpperCase()} sale · ${invoiceNumber}`,
+          note: `${cashTxType === 'cash_sale' ? 'Cash' : paymentMode.toUpperCase()} sale · ${invoiceNumber}${paymentStatus === 'unpaid' ? ' (Deposit)' : ''}`,
           createdBy: req.user._id
         }]);
       }
@@ -226,12 +232,17 @@ const createInvoice = [
         { refInvoiceId: invoice._id }
       );
 
-      // Update customer totalDue if there is a dueAmount
+      // Update customer or user totalDue and nextPaymentDate if there is a dueAmount
       if (customerId && dueAmount > 0) {
-        await Customer.findByIdAndUpdate(
-          customerId,
-          { $inc: { totalDue: dueAmount } }
-        );
+        const updateData = { $inc: { totalDue: dueAmount } };
+        if (dueDate) {
+          updateData.$set = { nextPaymentDate: dueDate };
+        }
+        const updatedCustomer = await Customer.findByIdAndUpdate(customerId, updateData);
+        if (!updatedCustomer) {
+           const User = require('../models/User');
+           await User.findByIdAndUpdate(customerId, updateData);
+        }
       }
 
       return successResponse(res, invoice, 201);

@@ -240,8 +240,20 @@ export default function InvoiceScreen() {
           </View>
           <View style={styles.totalRow}>
             <Text style={[styles.totalLbl, { color: colors.text2 }]}>Paid — {inv.paymentMode.charAt(0).toUpperCase() + inv.paymentMode.slice(1)}</Text>
-            <Text style={styles.paidVal}>{fmt(inv.total)} ✓</Text>
+            <Text style={[styles.paidVal, inv.paidAmount < inv.total ? { color: colors.foreground } : {}]}>{fmt(inv.paidAmount)} {inv.paidAmount >= inv.total ? "✓" : ""}</Text>
           </View>
+          {inv.dueAmount > 0 && (
+            <View style={styles.totalRow}>
+              <Text style={[styles.totalLbl, { color: colors.primary, fontWeight: '700' }]}>Due</Text>
+              <Text style={[styles.paidVal, { color: colors.primary }]}>{fmt(inv.dueAmount)}</Text>
+            </View>
+          )}
+          {inv.dueDate && (
+             <View style={styles.totalRow}>
+               <Text style={[styles.totalLbl, { color: colors.text2 }]}>Due Date</Text>
+               <Text style={[styles.totalVal, { color: colors.text2 }]}>{fmtDate(inv.dueDate)}</Text>
+             </View>
+          )}
         </View>
 
         {/* ── Actions Row ── */}

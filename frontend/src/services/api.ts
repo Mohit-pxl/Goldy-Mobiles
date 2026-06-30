@@ -123,6 +123,7 @@ export interface Customer {
   phone: string;
   email?: string;
   totalDue?: number;
+  nextPaymentDate?: string;
 }
 
 export interface InvoiceItem {

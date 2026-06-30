@@ -17,7 +17,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
-import { apiGet, apiPost, Customer, Invoice } from "@/services/api";
+import { apiGet, apiPost, apiPatch, Customer, Invoice } from "@/services/api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function CustomerLedgerScreen() {
@@ -30,6 +30,15 @@ export default function CustomerLedgerScreen() {
   const [showPayModal, setShowPayModal] = useState(false);
   const [payAmount, setPayAmount] = useState("");
   const [payMode, setPayMode] = useState<"cash" | "upi" | "card">("cash");
+
+  const [showDueModal, setShowDueModal] = useState(false);
+  const [newDueDate, setNewDueDate] = useState("");
+
+  const getFutureDate = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return d.toISOString().split("T")[0];
+  };
 
   const { data: customer } = useQuery({
     queryKey: ["customer", id],
@@ -53,7 +62,15 @@ export default function CustomerLedgerScreen() {
     mutationFn: async () => {
       const amt = Number(payAmount);
       if (!amt || isNaN(amt) || amt <= 0) throw new Error("Please enter a valid amount.");
-      await apiPost(`/customers/${id}/payments`, { amount: amt, paymentMode: payMode });
+      
+      const payload: any = { amount: amt, paymentMode: payMode };
+      
+      const remainingDue = (customer?.totalDue || 0) - amt;
+      if (remainingDue > 0 && newDueDate) {
+        payload.nextPaymentDate = new Date(newDueDate).toISOString();
+      }
+
+      await apiPost(`/customers/${id}/payments`, payload);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["customer", id] });
@@ -61,6 +78,21 @@ export default function CustomerLedgerScreen() {
       qc.invalidateQueries({ queryKey: ["customers"] });
       setShowPayModal(false);
       setPayAmount("");
+      setNewDueDate("");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (e: Error) => Alert.alert("Error", e.message),
+  });
+
+  const dueMutation = useMutation({
+    mutationFn: async () => {
+      if (!newDueDate) throw new Error("Please enter a valid date.");
+      await apiPatch(`/customers/${id}`, { nextPaymentDate: new Date(newDueDate).toISOString() });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["customer", id] });
+      qc.invalidateQueries({ queryKey: ["customers"] });
+      setShowDueModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
     onError: (e: Error) => Alert.alert("Error", e.message),
@@ -95,10 +127,17 @@ export default function CustomerLedgerScreen() {
             <Text style={[styles.customerName, { color: colors.foreground }]}>{customer.name}</Text>
             <Text style={[styles.customerPhone, { color: colors.text3 }]}>{customer.phone}</Text>
           </View>
-          <View style={[styles.dueBadge, { backgroundColor: totalDue > 0 ? colors.redBg : colors.greenBg }]}>
-            <Text style={[styles.dueLabel, { color: totalDue > 0 ? colors.redText : colors.greenText }]}>
-              {totalDue > 0 ? `Due: ${fmt(totalDue)}` : "Clear"}
-            </Text>
+          <View style={{ alignItems: "flex-end" }}>
+            <View style={[styles.dueBadge, { backgroundColor: totalDue > 0 ? colors.redBg : colors.greenBg }]}>
+              <Text style={[styles.dueLabel, { color: totalDue > 0 ? colors.redText : colors.greenText }]}>
+                {totalDue > 0 ? `Due: ${fmt(totalDue)}` : "Clear"}
+              </Text>
+            </View>
+            {customer.nextPaymentDate && totalDue > 0 && (
+              <Text style={{ fontSize: 10, color: colors.text3, marginTop: 4 }}>
+                Due on: {new Date(customer.nextPaymentDate).toLocaleDateString()}
+              </Text>
+            )}
           </View>
         </View>
       )}
@@ -106,11 +145,22 @@ export default function CustomerLedgerScreen() {
       {totalDue > 0 && (
         <View style={styles.actionRow}>
           <Pressable
-            style={[styles.payBtn, { backgroundColor: colors.primary }]}
-            onPress={() => setShowPayModal(true)}
+            style={[styles.payBtn, { backgroundColor: colors.primary, flex: 1 }]}
+            onPress={() => {
+               setPayAmount("");
+               setNewDueDate("");
+               setShowPayModal(true);
+            }}
           >
             <Ionicons name="cash-outline" size={16} color="#000" />
             <Text style={styles.payBtnText}>Record Payment</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.payBtn, { backgroundColor: colors.bg3, flex: 1, borderWidth: 1, borderColor: colors.border }]}
+            onPress={() => { setNewDueDate(""); setShowDueModal(true); }}
+          >
+            <Ionicons name="calendar-outline" size={16} color={colors.foreground} />
+            <Text style={[styles.payBtnText, { color: colors.foreground }]}>Set Due Date</Text>
           </Pressable>
         </View>
       )}
@@ -204,6 +254,31 @@ export default function CustomerLedgerScreen() {
                 </Pressable>
               ))}
             </View>
+
+            {/* Check if remaining due is > 0 */}
+            {((customer?.totalDue || 0) - (Number(payAmount) || 0)) > 0 && (
+              <View style={{ marginTop: 12 }}>
+                <Text style={[styles.fieldLabel, { color: colors.text3 }]}>Next Due Date (Remaining: {fmt((customer?.totalDue || 0) - (Number(payAmount) || 0))})</Text>
+                <View style={{ gap: 8, marginTop: 8 }}>
+                  <TextInput
+                    style={[styles.formInput, { color: colors.foreground, backgroundColor: colors.bg3, borderColor: colors.border }]}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor={colors.text3}
+                    value={newDueDate}
+                    onChangeText={setNewDueDate}
+                  />
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    <Pressable style={[styles.quickDateBtn, { borderColor: colors.border2 }]} onPress={() => setNewDueDate(getFutureDate(7))}>
+                      <Text style={{ color: colors.text2, fontSize: 12 }}>1 Week</Text>
+                    </Pressable>
+                    <Pressable style={[styles.quickDateBtn, { borderColor: colors.border2 }]} onPress={() => setNewDueDate(getFutureDate(30))}>
+                      <Text style={{ color: colors.text2, fontSize: 12 }}>1 Month</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            )}
+
             <Pressable
               style={[styles.submitBtn, { backgroundColor: colors.primary, opacity: payMutation.isPending ? 0.7 : 1 }]}
               onPress={() => payMutation.mutate()}
@@ -213,6 +288,48 @@ export default function CustomerLedgerScreen() {
                 <ActivityIndicator color="#000" size="small" />
               ) : (
                 <Text style={styles.submitText}>Save Payment</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Due Date Modal */}
+      <Modal visible={showDueModal} transparent animationType="slide" onRequestClose={() => setShowDueModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: colors.bg2, borderColor: colors.border }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Set Due Date</Text>
+              <Pressable onPress={() => setShowDueModal(false)} hitSlop={8}>
+                <Ionicons name="close" size={22} color={colors.text2} />
+              </Pressable>
+            </View>
+            <View style={{ gap: 8 }}>
+              <TextInput
+                style={[styles.formInput, { color: colors.foreground, backgroundColor: colors.bg3, borderColor: colors.border }]}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={colors.text3}
+                value={newDueDate}
+                onChangeText={setNewDueDate}
+              />
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <Pressable style={[styles.quickDateBtn, { borderColor: colors.border2 }]} onPress={() => setNewDueDate(getFutureDate(7))}>
+                  <Text style={{ color: colors.text2, fontSize: 12 }}>1 Week</Text>
+                </Pressable>
+                <Pressable style={[styles.quickDateBtn, { borderColor: colors.border2 }]} onPress={() => setNewDueDate(getFutureDate(30))}>
+                  <Text style={{ color: colors.text2, fontSize: 12 }}>1 Month</Text>
+                </Pressable>
+              </View>
+            </View>
+            <Pressable
+              style={[styles.submitBtn, { backgroundColor: colors.primary, opacity: dueMutation.isPending ? 0.7 : 1 }]}
+              onPress={() => dueMutation.mutate()}
+              disabled={dueMutation.isPending || !newDueDate}
+            >
+              {dueMutation.isPending ? (
+                <ActivityIndicator color="#000" size="small" />
+              ) : (
+                <Text style={styles.submitText}>Save Due Date</Text>
               )}
             </Pressable>
           </View>
@@ -258,4 +375,10 @@ const styles = StyleSheet.create({
   modeBtn: { borderWidth: 1, borderRadius: 8, paddingVertical: 10, alignItems: "center" },
   submitBtn: { borderRadius: 10, paddingVertical: 13, alignItems: "center", marginTop: 4 },
   submitText: { color: "#000", fontWeight: "700", fontFamily: "Inter_700Bold", fontSize: 14 },
+  quickDateBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
 });

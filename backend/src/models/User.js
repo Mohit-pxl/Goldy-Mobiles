@@ -49,6 +49,13 @@ const userSchema = new mongoose.Schema(
         ref: 'Product',
       },
     ],
+    totalDue: {
+      type: Number,
+      default: 0,
+    },
+    nextPaymentDate: {
+      type: Date,
+    },
   },
   {
     timestamps: true,

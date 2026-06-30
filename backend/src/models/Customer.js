@@ -20,6 +20,9 @@ const customerSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    nextPaymentDate: {
+      type: Date,
+    },
   },
   {
     timestamps: { createdAt: true, updatedAt: true },

@@ -102,6 +102,14 @@ const invoiceSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    dueDate: {
+      type: Date,
+    },
+    depositAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     customerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Customer',
