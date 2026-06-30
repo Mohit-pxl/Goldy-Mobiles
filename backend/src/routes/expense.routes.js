@@ -4,6 +4,7 @@ const { requireRole } = require('../middleware/permission.middleware');
 const {
   listExpenses,
   createExpense,
+  updateExpense,
   deleteExpense,
   getExpenseSummary,
 } = require('../controllers/expense.controller');
@@ -57,6 +58,9 @@ router.get('/', listExpenses);
 
 // POST /api/expenses — Create an expense
 router.post('/', createExpense);
+
+// PATCH /api/expenses/:id — Update an expense
+router.patch('/:id', updateExpense);
 
 /**
  * @swagger

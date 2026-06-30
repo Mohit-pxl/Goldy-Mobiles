@@ -12,7 +12,7 @@ import { useColors } from "@/hooks/useColors";
 import { apiGet, apiPost, apiPatch, apiDelete, Expense } from "@/services/api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-const EXPENSE_CATEGORIES = ["Rent", "Salary", "Electric", "Transport", "Other"];
+const EXPENSE_CATEGORIES = ["Rent", "Salary", "Electricity", "Transport", "Other"];
 
 export default function ExpensesScreen() {
   const colors = useColors();
@@ -45,13 +45,13 @@ export default function ExpensesScreen() {
         await apiPatch(`/expenses/${editExpenseId}`, {
           description: form.description.trim(),
           amount: Number(form.amount),
-          category: form.category,
+          category: form.category.toLowerCase(),
         });
       } else {
         await apiPost("/expenses", {
           description: form.description.trim(),
           amount: Number(form.amount),
-          category: form.category,
+          category: form.category.toLowerCase(),
         });
       }
     },
@@ -173,7 +173,7 @@ export default function ExpensesScreen() {
               <Text style={[styles.sectionLabel, { color: colors.text3 }]}>By category — {viewMode === "Yearly" ? year : new Date(year, month - 1).toLocaleString('default', { month: 'short' })}</Text>
               <View style={{ gap: 8, marginTop: 12, marginBottom: 16 }}>
                 {EXPENSE_CATEGORIES.map((c, i) => {
-                  const catTotal = filteredExpenses.filter(e => e.category === c).reduce((s, e) => s + e.amount, 0);
+                  const catTotal = filteredExpenses.filter(e => (e.category || "").toLowerCase() === c.toLowerCase()).reduce((s, e) => s + e.amount, 0);
                   if (catTotal === 0 && filteredExpenses.length > 0) return null; 
                   const pct = currentTotal > 0 ? (catTotal / currentTotal) * 100 : 0;
                   return (
@@ -194,10 +194,10 @@ export default function ExpensesScreen() {
           }
           renderItem={({ item: exp }) => {
             let icon = "wallet-outline";
-            if (exp.category === "Rent") icon = "business-outline";
-            if (exp.category === "Electric") icon = "flash-outline";
-            if (exp.category === "Salary") icon = "people-outline";
-            if (exp.category === "Transport") icon = "car-outline";
+            if (exp.category === "rent") icon = "business-outline";
+            if (exp.category === "electricity") icon = "flash-outline";
+            if (exp.category === "salary") icon = "people-outline";
+            if (exp.category === "transport") icon = "car-outline";
 
             return (
               <View style={[styles.row, { borderBottomColor: colors.border }]}>

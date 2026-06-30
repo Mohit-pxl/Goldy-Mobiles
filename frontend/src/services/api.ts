@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 
-const getApiUrl = () => {
+export const getApiUrl = () => {
   // 1. Explicit env var takes priority
   if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
   if (process.env.EXPO_PUBLIC_DOMAIN)
@@ -94,6 +94,11 @@ export interface Product {
   name: string;
   brand: string;
   category: string;
+  subcategory?: string;
+  model?: string;
+  variant?: string;
+  availableColors?: string[];
+  trackingType?: "IMEI" | "SERIAL" | "QUANTITY";
   sellingPrice: number;
   mrp?: number;
   costPrice?: number;
@@ -103,10 +108,13 @@ export interface Product {
   hsnCode?: string;
   barcode?: string;
   internalCode?: string;
+  sku?: string;
   images: string[];
   specifications?: { key: string; value: string }[];
   isActive: boolean;
   description?: string;
+  trackImei?: boolean;
+  trackSerial?: boolean;
 }
 
 export interface Customer {

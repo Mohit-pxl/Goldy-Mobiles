@@ -14,12 +14,14 @@ export default function StockMovementsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { productId } = useLocalSearchParams<{ productId: string }>();
+  const { productId, scannedBarcode } = useLocalSearchParams<{ productId: string; scannedBarcode?: string }>();
   const qc = useQueryClient();
   const [showAdd, setShowAdd] = useState(false);
   const [type, setType] = useState<"in" | "out" | "adjustment">("in");
   const [qty, setQty] = useState("");
   const [note, setNote] = useState("");
+  const [identifiers, setIdentifiers] = useState<string[]>([]);
+  const [manualCode, setManualCode] = useState("");
 
   const productQuery = useQuery({
     queryKey: ["product", productId],
@@ -33,15 +35,51 @@ export default function StockMovementsScreen() {
   const movementsQuery = useQuery({
     queryKey: ["stock-movements", productId],
     queryFn: async () => {
-      const res = await apiGet<StockMovement[]>(`/stock/movements?productId=${productId}`);
+      const res = await apiGet<StockMovement[]>(`/stock/movements/${productId}`);
       return res.data || [];
     },
     enabled: !!productId,
   });
 
+  const product = productQuery.data;
+  const isTracking = product?.trackImei || product?.trackSerial;
+
+  // Handle barcode scanner return
+  React.useEffect(() => {
+    if (scannedBarcode && isTracking) {
+      if (!identifiers.includes(scannedBarcode)) {
+        const newArr = [...identifiers, scannedBarcode];
+        setIdentifiers(newArr);
+        setQty(String(newArr.length));
+        setShowAdd(true);
+      }
+      router.setParams({ scannedBarcode: undefined });
+    }
+  }, [scannedBarcode, isTracking, identifiers, router]);
+
+  const addManualCode = () => {
+    const code = manualCode.trim();
+    if (code && !identifiers.includes(code)) {
+      const newArr = [...identifiers, code];
+      setIdentifiers(newArr);
+      setQty(String(newArr.length));
+    }
+    setManualCode("");
+  };
+  
+  const removeIdentifier = (code: string) => {
+    const newArr = identifiers.filter(c => c !== code);
+    setIdentifiers(newArr);
+    setQty(String(newArr.length));
+  };
+
   const addMutation = useMutation({
     mutationFn: async () => {
-      await apiPost("/stock/movements", { productId, type, qty: Number(qty), note: note || undefined });
+      const payload: any = { productId, type, qty: Number(qty), note: note || undefined };
+      if (isTracking && type === "in") {
+        payload.identifiers = identifiers;
+      }
+      await apiPost("/stock/movements", payload);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["stock-movements", productId] });
@@ -49,12 +87,12 @@ export default function StockMovementsScreen() {
       setShowAdd(false);
       setQty("");
       setNote("");
+      setIdentifiers([]);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
     onError: (e: Error) => Alert.alert("Error", e.message),
   });
 
-  const product = productQuery.data;
   const movements = movementsQuery.data || [];
 
   const fmt = (d: string) => {
@@ -92,11 +130,11 @@ export default function StockMovementsScreen() {
 
       <Pressable
         style={[styles.addBtn, { backgroundColor: colors.bg3, borderColor: colors.border2, margin: 14 }]}
-        onPress={() => setShowAdd((v) => !v)}
+        onPress={() => router.push({ pathname: "/staff/add-stock" as any, params: { productId } })}
       >
         <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
-        <Text style={[styles.addBtnText, { color: colors.primary }]}>Add stock movement</Text>
-        <Ionicons name={showAdd ? "chevron-up" : "chevron-down"} size={16} color={colors.text3} />
+        <Text style={[styles.addBtnText, { color: colors.primary }]}>Add stock</Text>
+        <Ionicons name="chevron-forward" size={16} color={colors.text3} />
       </Pressable>
 
       {showAdd && (
@@ -108,10 +146,73 @@ export default function StockMovementsScreen() {
               </Pressable>
             ))}
           </View>
-          <TextInput style={[styles.formInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.bg3 }]} placeholder="Quantity" placeholderTextColor={colors.text3} keyboardType="numeric" value={qty} onChangeText={setQty} />
+          
+          {isTracking && type === "in" ? (
+            <View style={{ gap: 12, marginTop: 4 }}>
+              <Pressable 
+                style={[styles.scanBtn, { backgroundColor: colors.bg4, borderColor: colors.primary, borderWidth: 1 }]}
+                onPress={() => router.push({ pathname: "/staff/barcode-scanner", params: { returnMode: "barcode", returnPath: `/staff/stock/${productId}`, expectedCategory: product.trackImei ? "IMEI" : "Serial" } })}
+              >
+                <Ionicons name="scan" size={20} color={colors.primary} />
+                <Text style={{ color: colors.primary, fontWeight: "600", fontFamily: "Inter_600SemiBold", fontSize: 14 }}>
+                  Scan {product.trackImei ? "IMEI" : "Serial Number"}
+                </Text>
+              </Pressable>
+              
+              <Text style={{ fontSize: 12, color: colors.text3, textAlign: 'center', marginTop: -4 }}>Or enter manually</Text>
+              
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TextInput 
+                  style={[styles.formInput, { flex: 1, color: colors.foreground, borderColor: colors.border, backgroundColor: colors.bg3 }]} 
+                  placeholder={`Enter ${product.trackImei ? "IMEI" : "Serial"} manually`} 
+                  placeholderTextColor={colors.text3} 
+                  value={manualCode} 
+                  onChangeText={setManualCode} 
+                  onSubmitEditing={addManualCode}
+                />
+                <Pressable style={[styles.addManualBtn, { backgroundColor: colors.bg4, borderColor: colors.border }]} onPress={addManualCode}>
+                   <Ionicons name="add" size={20} color={colors.primary} />
+                </Pressable>
+              </View>
+              
+              {identifiers.length > 0 && (
+                <View style={{ marginTop: 8 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <Text style={{ fontSize: 13, fontWeight: "600", fontFamily: "Inter_600SemiBold", color: colors.foreground }}>
+                      Scanned List ({identifiers.length})
+                    </Text>
+                    <Pressable onPress={() => { setIdentifiers([]); setQty(""); }}>
+                      <Text style={{ fontSize: 12, color: colors.redText, fontFamily: "Inter_500Medium" }}>Clear All</Text>
+                    </Pressable>
+                  </View>
+                  <View style={{ gap: 6 }}>
+                    {identifiers.map(code => (
+                      <View key={code} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bg3, padding: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.border2 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                          <Ionicons name="checkmark-circle" size={16} color={colors.greenText} />
+                          <Text style={{ color: colors.foreground, fontFamily: "Inter_500Medium" }}>{code}</Text>
+                        </View>
+                        <Pressable onPress={() => removeIdentifier(code)} hitSlop={8}>
+                          <Ionicons name="close" size={18} color={colors.text3} />
+                        </Pressable>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </View>
+          ) : (
+             <TextInput style={[styles.formInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.bg3 }]} placeholder="Quantity" placeholderTextColor={colors.text3} keyboardType="numeric" value={qty} onChangeText={setQty} editable={!(isTracking && type === "in")} />
+          )}
+          
           <TextInput style={[styles.formInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.bg3 }]} placeholder="Note (optional)" placeholderTextColor={colors.text3} value={note} onChangeText={setNote} />
-          <Pressable style={[styles.submitBtn, { backgroundColor: colors.primary, opacity: addMutation.isPending ? 0.7 : 1 }]} onPress={() => addMutation.mutate()} disabled={addMutation.isPending || !qty}>
-            {addMutation.isPending ? <ActivityIndicator color="#000" size="small" /> : <Text style={styles.submitBtnText}>Submit</Text>}
+          
+          <Pressable style={[styles.submitBtn, { backgroundColor: colors.primary, opacity: addMutation.isPending || !qty || (isTracking && type === "in" && identifiers.length === 0) ? 0.7 : 1 }]} onPress={() => addMutation.mutate()} disabled={addMutation.isPending || !qty || (isTracking && type === "in" && identifiers.length === 0)}>
+            {addMutation.isPending ? <ActivityIndicator color="#000" size="small" /> : (
+              <Text style={styles.submitBtnText}>
+                {isTracking && type === "in" && identifiers.length > 0 ? `Add to Stock (${identifiers.length})` : "Submit"}
+              </Text>
+            )}
           </Pressable>
         </View>
       )}
@@ -166,4 +267,6 @@ const styles = StyleSheet.create({
   movNote: { fontSize: 12, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
   movSub: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
   empty: { textAlign: "center", paddingTop: 32, fontFamily: "Inter_400Regular" },
+  scanBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12, borderRadius: 8 },
+  addManualBtn: { width: 44, height: 44, borderRadius: 8, borderWidth: 1, alignItems: "center", justifyContent: "center" },
 });

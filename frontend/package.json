@@ -60,7 +60,13 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.4.0",
     "@react-native-community/datetimepicker": "8.4.4",
-    "expo-camera": "~17.0.10"
+    "expo-camera": "~17.0.10",
+    "expo-file-system": "~19.0.23",
+    "expo-print": "~15.0.8",
+    "expo-sharing": "~14.0.8",
+    "react-hook-form": "^7.80.0",
+    "react-native-toast-message": "^2.3.3"
   }
 }

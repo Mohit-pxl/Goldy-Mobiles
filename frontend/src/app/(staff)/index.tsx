@@ -11,6 +11,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { apiGet } from "@/services/api";
 import { useQuery } from "@tanstack/react-query";
+import { useCashSummary } from "@/services/queries/useCash";
 
 interface DashboardData {
   todaySales: number;
@@ -49,6 +50,8 @@ export default function StaffDashboard() {
       } as DashboardData;
     },
   });
+
+  const { data: cashSummary, isLoading: cashLoading } = useCashSummary();
 
   const invoicesQuery = useQuery({
     queryKey: ["recent-invoices"],
@@ -100,6 +103,11 @@ export default function StaffDashboard() {
         ) : (
           <View style={styles.metricsGrid}>
             <MetricCard value={fmt(data?.todaySales || 0)} label="Today's sales" valueColor="accent" />
+            
+            {/* Cash & Bank Cards */}
+            <MetricCard value={cashLoading ? "..." : fmt(cashSummary?.cashInHand)} label="Cash in hand" valueColor="green" />
+            <MetricCard value={cashLoading ? "..." : fmt(cashSummary?.bankBalance)} label="In account" valueColor="accent" />
+            
             {isAdmin && <MetricCard value={fmt(data?.stockValue || 0)} label="Stock value" />}
             {!isAdmin && <MetricCard value="—" label="Stock value" />}
             <MetricCard value={`${data?.lowStockCount || 0} items`} label="⚠ Low stock" valueColor="red" />
@@ -121,6 +129,15 @@ export default function StaffDashboard() {
           >
             <Ionicons name="cube-outline" size={18} color={colors.primary} />
             <Text style={[styles.actionText, { color: colors.foreground }]}>Add product</Text>
+          </Pressable>
+        </View>
+        <View style={styles.quickActions}>
+          <Pressable
+            style={[styles.actionBtn, { backgroundColor: colors.bg3, borderColor: colors.border2, marginTop: -4 }]}
+            onPress={() => router.push("/staff/cash" as any)}
+          >
+            <Ionicons name="wallet-outline" size={18} color={colors.primary} />
+            <Text style={[styles.actionText, { color: colors.foreground }]}>View cash and bank</Text>
           </Pressable>
         </View>
 

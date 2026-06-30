@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import EmptyState from "@/components/EmptyState";
 import ProductListRow from "@/components/ProductListRow";
+import RadialMenu, { RadialOption } from "@/components/RadialMenu";
 import { SkeletonRow } from "@/components/Skeleton";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
@@ -29,6 +30,7 @@ export default function StaffProductsScreen() {
     queryKey: ["staff-products", activeFilter],
     queryFn: async () => {
       const params = new URLSearchParams();
+      params.set("limit", "1000"); // Fetch all products for local search and complete listing
       if (activeFilter === "⚠ Low stock") params.set("lowStock", "true");
       else if (activeFilter !== "All") params.set("category", activeFilter);
       const res = await apiGet<Product[]>(`/products?${params}`);
@@ -37,7 +39,7 @@ export default function StaffProductsScreen() {
   });
 
   const products = (data || []).filter(
-    (p) => !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.brand.toLowerCase().includes(search.toLowerCase())
+    (p) => !search || (p.name || "").toLowerCase().includes(search.toLowerCase()) || (p.brand || "").toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -45,19 +47,15 @@ export default function StaffProductsScreen() {
       <View style={[styles.headerContainer, { paddingTop: insets.top + 8, backgroundColor: colors.background }]}>
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.foreground }]}>Products</Text>
-          <Pressable
-            style={({ pressed }) => [
-              styles.fab,
-              { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }
-            ]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.push("/staff/add-product");
-            }}
-          >
-            <Ionicons name="add" size={16} color="#000" />
-            <Text style={styles.fabText}>Add</Text>
-          </Pressable>
+          <View style={styles.headerActions}>
+            <RadialMenu
+              options={[
+                { id: "stock", label: "Stock", icon: "cube", color: colors.primary, onSelect: () => router.push("/staff/add-stock" as any) },
+                { id: "remove", label: "Remove", icon: "trash", color: colors.destructive, onSelect: () => router.push("/staff/remove-product") },
+                { id: "add", label: "Add", icon: "add", color: colors.primary, onSelect: () => router.push("/staff/add-product") },
+              ]}
+            />
+          </View>
         </View>
 
         <View style={styles.searchRow}>
@@ -149,6 +147,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 8,
   },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  stockBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 24,
+    borderWidth: 1,
+  },
+  stockBtnText: { fontWeight: "700", fontFamily: "Inter_700Bold", fontSize: 12 },
   title: { fontSize: 24, fontWeight: "800", fontFamily: "Inter_700Bold", letterSpacing: -0.5 },
   fab: {
     flexDirection: "row",

@@ -6,8 +6,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import MetricCard from "@/components/MetricCard";
 import { useColors } from "@/hooks/useColors";
-import { apiGet, Product, SalesReport } from "@/services/api";
+import { apiGet, getApiUrl, Product, SalesReport } from "@/services/api";
 import { useQuery } from "@tanstack/react-query";
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert } from "react-native";
 
 const PERIODS = ["Monthly", "Yearly", "Daily"] as const;
 type Period = (typeof PERIODS)[number];
@@ -46,7 +50,7 @@ export default function ReportsScreen() {
   const lowStockQuery = useQuery({
     queryKey: ["low-stock"],
     queryFn: async () => {
-      const res = await apiGet<Product[]>("/products?lowStock=true");
+      const res = await apiGet<Product[]>("/products?lowStock=true&limit=1000");
       return res.data || [];
     },
   });
@@ -74,6 +78,33 @@ export default function ReportsScreen() {
     else if (period === "Monthly") nd.setMonth(nd.getMonth() + 1);
     else if (period === "Daily") nd.setDate(nd.getDate() + 1);
     setDate(nd);
+  };
+
+  const handleExport = async () => {
+    try {
+      Alert.alert("Exporting", "Preparing your report...");
+      const token = await AsyncStorage.getItem("auth_token");
+      const url = `${getApiUrl()}/reports/sales/export?period=${period.toLowerCase()}&date=${date.toISOString()}`;
+      const ext = "csv"; // Or check if backend sends pdf
+      const fileUri = `${FileSystem.documentDirectory}report-${period.toLowerCase()}.${ext}`;
+
+      const res = await FileSystem.downloadAsync(url, fileUri, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (res.status !== 200) {
+        throw new Error("Failed to export report");
+      }
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(res.uri);
+      } else {
+        Alert.alert("Success", "Report downloaded to documents");
+      }
+    } catch (e) {
+      Alert.alert("Error", "Could not export report");
+      console.error(e);
+    }
   };
 
   return (
@@ -165,9 +196,12 @@ export default function ReportsScreen() {
           )}
         </View>
 
-        <Pressable style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.bg3, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border2, marginTop: 10 }}>
+        <Pressable 
+          onPress={handleExport}
+          style={({pressed}) => [{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.bg3, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border2, marginTop: 10, opacity: pressed ? 0.7 : 1 }]}
+        >
           <Ionicons name="download-outline" size={16} color={colors.text2} />
-          <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: colors.text2 }}>Export CSV / PDF</Text>
+          <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: colors.text2 }}>Export CSV</Text>
         </Pressable>
       </ScrollView>
     </View>

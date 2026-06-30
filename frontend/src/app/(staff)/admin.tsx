@@ -173,6 +173,7 @@ export default function AdminScreen() {
             { icon: "document-text-outline", label: "Quotations", path: "/staff/quotations" as const },
             { icon: "people-outline", label: "Khata", path: "/staff/khata" as const },
             { icon: "add-circle-outline", label: "New Sale", path: "/(staff)/billing" as const },
+            { icon: "cube-outline", label: "Add Stock", path: "/staff/add-stock" as any },
           ].map((item) => (
             <Pressable
               key={item.label}

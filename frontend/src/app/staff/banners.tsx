@@ -16,9 +16,10 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { useColors } from "@/hooks/useColors";
-import { apiGet, apiPost, apiDelete, Banner } from "@/services/api";
+import { apiGet, apiDelete, Banner, getApiUrl } from "@/services/api";
 
 export default function BannersManagementScreen() {
   const colors = useColors();
@@ -29,6 +30,8 @@ export default function BannersManagementScreen() {
   const [imageUrl, setImageUrl] = useState("");
   const [adding, setAdding] = useState(false);
 
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+
   const { data: banners = [], isLoading } = useQuery({
     queryKey: ["banners"],
     queryFn: async () => {
@@ -37,10 +40,36 @@ export default function BannersManagementScreen() {
     },
   });
 
+  const uploadBannerWithProgress = (url: string): Promise<any> => {
+    return new Promise(async (resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `${getApiUrl()}/banners`);
+      xhr.setRequestHeader("Content-Type", "application/json");
+      const token = await AsyncStorage.getItem("auth_token");
+      if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          setUploadProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText));
+        } else {
+          reject(new Error("Upload failed"));
+        }
+      };
+      xhr.onerror = () => reject(new Error("Network Error"));
+
+      // JSON stringify can be slow, but with reduced image quality it should be fast
+      xhr.send(JSON.stringify({ imageUrl: url }));
+    });
+  };
+
   const addMutation = useMutation({
-    mutationFn: async (url: string) => {
-      return apiPost("/banners", { imageUrl: url });
-    },
+    mutationFn: uploadBannerWithProgress,
     onSuccess: () => {
       setImageUrl("");
       qc.invalidateQueries({ queryKey: ["banners"] });
@@ -48,7 +77,10 @@ export default function BannersManagementScreen() {
     onError: () => {
       Alert.alert("Error", "Failed to add banner");
     },
-    onSettled: () => setAdding(false),
+    onSettled: () => {
+      setAdding(false);
+      setUploadProgress(null);
+    }
   });
 
   const deleteMutation = useMutation({
@@ -89,7 +121,8 @@ export default function BannersManagementScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
-      quality: 0.7,
+      aspect: [16, 9],
+      quality: 0.3, // Reduced quality prevents base64 out-of-memory and UI freezing
       base64: true,
     });
 
@@ -107,7 +140,7 @@ export default function BannersManagementScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 12, borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
+        <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace('/more')} style={styles.backBtn} hitSlop={8}>
           <Ionicons name="arrow-back" size={24} color={colors.foreground} />
         </Pressable>
         <Text style={[styles.title, { color: colors.foreground }]}>Manage Banners</Text>
@@ -157,7 +190,20 @@ export default function BannersManagementScreen() {
               {adding ? <ActivityIndicator size="small" color="#000" /> : <Text style={styles.addBtnText}>Add</Text>}
             </Pressable>
           </View>
-          <Text style={[styles.helper, { color: colors.text3 }]}>Banners are displayed on the Customer Home Page. Provide a valid HTTP(S) URL or pick from local storage.</Text>
+          
+          {uploadProgress !== null && (
+            <View style={{ marginTop: 12 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                <Text style={{ color: colors.text2, fontSize: 12, fontFamily: "Inter_500Medium" }}>Uploading...</Text>
+                <Text style={{ color: colors.text2, fontSize: 12, fontFamily: "Inter_500Medium" }}>{uploadProgress}%</Text>
+              </View>
+              <View style={{ height: 4, backgroundColor: colors.bg4, borderRadius: 2, overflow: 'hidden' }}>
+                <View style={{ height: '100%', width: `${uploadProgress}%`, backgroundColor: colors.primary }} />
+              </View>
+            </View>
+          )}
+
+          <Text style={[styles.helper, { color: colors.text3, marginTop: uploadProgress !== null ? 12 : 6 }]}>Banners are displayed on the Customer Home Page. Provide a valid HTTP(S) URL or pick from local storage.</Text>
         </View>
 
         {isLoading ? (
@@ -178,7 +224,9 @@ export default function BannersManagementScreen() {
               <View style={[styles.bannerCard, { backgroundColor: colors.bg2, borderColor: colors.border }]}>
                 <Image source={{ uri: item.imageUrl }} style={styles.bannerImg} resizeMode="cover" />
                 <View style={styles.bannerRow}>
-                  <Text style={[styles.bannerUrl, { color: colors.text2 }]} numberOfLines={1}>{item.imageUrl}</Text>
+                  <Text style={[styles.bannerUrl, { color: colors.text2 }]} numberOfLines={1}>
+                    {item.imageUrl.startsWith("data:image") ? "Base64 Image Data" : item.imageUrl}
+                  </Text>
                   <Pressable onPress={() => handleDelete(item._id)} style={[styles.delBtn, { backgroundColor: colors.destructive + '22' }]}>
                     <Ionicons name="trash-outline" size={16} color={colors.destructive} />
                   </Pressable>

@@ -30,6 +30,10 @@ const invoiceItemSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    identifiers: {
+      type: [String],
+      default: [],
+    },
   },
   { _id: false }
 );
