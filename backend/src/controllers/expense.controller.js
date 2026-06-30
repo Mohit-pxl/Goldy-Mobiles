@@ -59,6 +59,15 @@ const createExpense = [
         createdBy: req.user._id,
       });
 
+      const CashTransaction = require('../models/CashTransaction');
+      await CashTransaction.create({
+        type: 'cash_expense',
+        amount: -Math.abs(expense.amount),
+        refExpenseId: expense._id,
+        note: `Expense · ${expense.category}${expense.note ? ' · ' + expense.note : ''}`,
+        createdBy: req.user._id
+      });
+
       return successResponse(res, expense, 201);
     } catch (error) {
       next(error);

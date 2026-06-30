@@ -189,6 +189,20 @@ const createInvoice = [
         ]
       );
 
+      // Auto-create CashTransaction for non-credit sales
+      if (paymentMode !== 'credit') {
+        const CashTransaction = require('../models/CashTransaction');
+        const cashTxType = paymentMode === 'cash' ? 'cash_sale' : 'bank_sale';
+        
+        await CashTransaction.create([{
+          type: cashTxType,
+          amount: total,
+          refInvoiceId: invoice._id,
+          note: `${cashTxType === 'cash_sale' ? 'Cash' : paymentMode.toUpperCase()} sale · ${invoiceNumber}`,
+          createdBy: req.user._id
+        }]);
+      }
+
       // Delete sold ProductItems from DB as requested
       const allIdentifiers = invoiceItems.flatMap(i => i.identifiers);
       if (allIdentifiers.length > 0) {

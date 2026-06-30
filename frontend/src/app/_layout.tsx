@@ -70,6 +70,7 @@ function RootLayoutNav() {
         <Stack.Screen name="staff/add-product" options={{ title: "Add Product", headerShown: false }} />
         <Stack.Screen name="staff/remove-product" options={{ title: "Remove Products", headerShown: false }} />
         <Stack.Screen name="staff/add-stock" options={{ title: "Add Stock", headerShown: false }} />
+        <Stack.Screen name="staff/cash" options={{ headerShown: false }} />
         <Stack.Screen name="staff/invoice/[id]" options={{ title: "Invoice", headerShown: false }} />
         <Stack.Screen name="staff/stock/[productId]" options={{ title: "Stock Movements", headerShown: false }} />
         <Stack.Screen name="staff/khata" options={{ title: "Khata / Ledger", headerShown: false }} />

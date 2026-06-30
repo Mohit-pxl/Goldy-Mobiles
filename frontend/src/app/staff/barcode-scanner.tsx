@@ -342,7 +342,7 @@ export default function BarcodeScannerScreen() {
             
             <Pressable
               style={[styles.useCodeBtn, { backgroundColor: colors.primary }]}
-              onPress={handleUseSelectedCode}
+              onPress={() => handleUseSelectedCode()}
               disabled={resolving || !selectedCodeData}
             >
               {resolving ? (

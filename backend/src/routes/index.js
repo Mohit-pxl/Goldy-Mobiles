@@ -15,6 +15,7 @@ const inquiryRoutes = require('./inquiry.routes');
 const bannerRoutes = require('./banner.routes');
 const settingsRoutes = require('./settings.routes');
 const wishlistRoutes = require('./wishlist.routes');
+const cashRoutes = require('./cash.routes');
 
 // Stock routes (inline since it's simple)
 const { authenticate } = require('../middleware/auth.middleware');
@@ -84,8 +85,8 @@ router.use('/inquiries', inquiryRoutes);
 router.use('/banners', bannerRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/wishlist', wishlistRoutes);
+router.use('/cash', cashRoutes);
 
-// Alias for frontend staff requests
 // Alias for frontend staff requests
 const { listStaff, inviteStaff, updateUserRole, updateUser, removeStaff } = require('../controllers/user.controller');
 router.get('/staff', authenticate, requireRole(['staff', 'admin']), listStaff);

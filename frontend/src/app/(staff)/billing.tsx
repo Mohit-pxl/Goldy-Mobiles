@@ -39,7 +39,7 @@ export default function BillingScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ mode?: string }>();
   const isQuotationMode = params.mode === "quotation";
-  const { items, addItem, updateQty, removeIdentifier, clearCart, subtotal, gstAmount, total } = useCart();
+  const { items, addItem, updateQty, removeItem, removeIdentifier, clearCart, subtotal, gstAmount, total } = useCart();
   const navigation = useNavigation();
 
   const [searchQuery, setSearchQuery] = useState("");
