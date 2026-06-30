@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const { body, param, validationResult } = require('express-validator');
 const Customer = require('../models/Customer');
 const Invoice = require('../models/Invoice');
+const User = require('../models/User');
 const { nanoid } = require('nanoid');
 const { successResponse, errorResponse } = require('../utils/apiResponse');
 const { paginate } = require('../utils/pagination');
@@ -16,27 +17,39 @@ const listCustomers = async (req, res, next) => {
     const { search } = req.query;
 
     const filter = {};
+    const userFilter = { role: 'customer' };
+
     if (search) {
+      const searchRegex = { $regex: search, $options: 'i' };
       filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
+        { name: searchRegex },
+        { phone: searchRegex },
+      ];
+      userFilter.$or = [
+        { name: searchRegex },
+        { phone: searchRegex },
       ];
     }
 
     if (req.query.count === 'true') {
-      const count = await Customer.countDocuments(filter);
-      return successResponse(res, { count });
+      const [customerCount, userCount] = await Promise.all([
+        Customer.countDocuments(filter),
+        User.countDocuments(userFilter),
+      ]);
+      return successResponse(res, { count: customerCount + userCount });
     }
 
-    const [customers, total] = await Promise.all([
-      Customer.find(filter)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit),
+    const [customers, users, totalCustomers, totalUsers] = await Promise.all([
+      Customer.find(filter).sort({ createdAt: -1 }),
+      User.find(userFilter).sort({ createdAt: -1 }),
       Customer.countDocuments(filter),
+      User.countDocuments(userFilter),
     ]);
 
-    return successResponse(res, customers, 200, buildMeta(total));
+    const combined = [...customers, ...users].sort((a, b) => b.createdAt - a.createdAt);
+    const paginatedResult = combined.slice(skip, skip + limit);
+
+    return successResponse(res, paginatedResult, 200, buildMeta(totalCustomers + totalUsers));
   } catch (error) {
     next(error);
   }
