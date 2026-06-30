@@ -6,8 +6,12 @@ import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Share, StyleS
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
-import { apiGet, apiPost, Invoice } from "@/services/api";
+import { apiGet, apiPost, getApiUrl, Invoice } from "@/services/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function InvoiceScreen() {
   const colors = useColors();
@@ -67,9 +71,53 @@ export default function InvoiceScreen() {
     Linking.openURL(`https://wa.me/${customer.phone.replace(/\D/g, "")}?text=${msg}`);
   };
 
-  const handleDownloadPDF = () => {
-    // Placeholder for actual PDF generation (e.g. using expo-print)
-    Alert.alert("Download PDF", "Invoice PDF will be downloaded.");
+  const handleDownloadPDF = async () => {
+    if (!inv) return;
+    try {
+      Alert.alert("Downloading...", "Please wait while the PDF is prepared.");
+      const token = await AsyncStorage.getItem("auth_token");
+      const url = `${getApiUrl()}/billing/invoices/${id}/pdf`;
+      const fileUri = `${FileSystem.documentDirectory}invoice-${inv.invoiceNumber}.pdf`;
+
+      const downloadRes = await FileSystem.downloadAsync(url, fileUri, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (downloadRes.status !== 200) {
+        throw new Error("Failed to download PDF.");
+      }
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(downloadRes.uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+      } else {
+        Alert.alert("Success", "PDF downloaded to app documents.");
+      }
+    } catch (e) {
+      Alert.alert("Error", "Could not download PDF.");
+      console.error(e);
+    }
+  };
+
+  const handlePrint = async () => {
+    if (!inv) return;
+    try {
+      const token = await AsyncStorage.getItem("auth_token");
+      const url = `${getApiUrl()}/billing/invoices/${id}/pdf`;
+      const fileUri = `${FileSystem.documentDirectory}invoice-${inv.invoiceNumber}.pdf`;
+
+      const downloadRes = await FileSystem.downloadAsync(url, fileUri, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (downloadRes.status !== 200) {
+        throw new Error("Failed to prepare PDF for printing.");
+      }
+
+      await Print.printAsync({ uri: downloadRes.uri });
+    } catch (e) {
+      Alert.alert("Error", "Could not print PDF.");
+      console.error(e);
+    }
   };
 
   const handleMarkPaid = async () => {
@@ -198,13 +246,27 @@ export default function InvoiceScreen() {
 
         {/* ── Actions Row ── */}
         <View style={styles.actionsRow}>
-          <Pressable
-            style={[styles.btnSm, { backgroundColor: colors.bg2, borderColor: colors.border2 }]}
-            onPress={handleDownloadPDF}
-          >
-            <Ionicons name="download-outline" size={16} color={colors.foreground} />
-            <Text style={[styles.btnSmText, { color: colors.foreground }]}>PDF</Text>
-          </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  { backgroundColor: colors.bg4, opacity: pressed ? 0.7 : 1 },
+                ]}
+                onPress={handlePrint}
+              >
+                <Ionicons name="print-outline" size={24} color={colors.primary} />
+                <Text style={[styles.actionBtnText, { color: colors.foreground }]}>Print</Text>
+              </Pressable>
+              
+              <Pressable
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  { backgroundColor: colors.bg4, opacity: pressed ? 0.7 : 1 },
+                ]}
+                onPress={handleDownloadPDF}
+              >
+                <Ionicons name="download-outline" size={24} color={colors.primary} />
+                <Text style={[styles.actionBtnText, { color: colors.foreground }]}>Download</Text>
+              </Pressable>
           <Pressable
             style={[styles.btnWa, { backgroundColor: "#25D366" }]}
             onPress={handleWhatsApp}
@@ -314,6 +376,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     marginTop: 24,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    borderRadius: 10,
+    paddingVertical: 12,
+  },
+  actionBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+    fontFamily: "Inter_600SemiBold",
   },
   btnSm: {
     flex: 1,

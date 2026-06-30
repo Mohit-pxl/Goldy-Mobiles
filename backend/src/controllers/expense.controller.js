@@ -59,7 +59,54 @@ const createExpense = [
         createdBy: req.user._id,
       });
 
+      const CashTransaction = require('../models/CashTransaction');
+      await CashTransaction.create({
+        type: 'cash_expense',
+        amount: -Math.abs(expense.amount),
+        refExpenseId: expense._id,
+        note: `Expense · ${expense.category}${expense.note ? ' · ' + expense.note : ''}`,
+        createdBy: req.user._id
+      });
+
       return successResponse(res, expense, 201);
+    } catch (error) {
+      next(error);
+    }
+  },
+];
+
+/**
+ * PATCH /api/expenses/:id
+ * Update an existing expense entry.
+ */
+const updateExpense = [
+  param('id').isMongoId().withMessage('Invalid expense ID'),
+  body('category')
+    .optional()
+    .isIn(['rent', 'electricity', 'salary', 'transport', 'other'])
+    .withMessage('category must be rent, electricity, salary, transport, or other'),
+  body('amount').optional().isFloat({ gt: 0 }).withMessage('amount must be a positive number'),
+  body('description').optional().trim(),
+  body('note').optional().trim(),
+
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return errorResponse(res, 'Validation failed.', 400, errors.array());
+      }
+
+      const expense = await Expense.findByIdAndUpdate(
+        req.params.id,
+        { $set: req.body },
+        { new: true, runValidators: true }
+      );
+
+      if (!expense) {
+        return errorResponse(res, 'Expense not found.', 404);
+      }
+
+      return successResponse(res, expense);
     } catch (error) {
       next(error);
     }
@@ -138,4 +185,4 @@ const getExpenseSummary = async (req, res, next) => {
   }
 };
 
-module.exports = { listExpenses, createExpense, deleteExpense, getExpenseSummary };
+module.exports = { listExpenses, createExpense, updateExpense, deleteExpense, getExpenseSummary };

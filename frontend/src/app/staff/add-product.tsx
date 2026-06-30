@@ -25,6 +25,12 @@ import { apiGet, apiPatch, apiPost, Product } from "@/services/api";
 
 const CATEGORIES = ["Mobiles", "Audio", "Earphones", "Chargers", "Smart Watches", "Laptops", "Accessories", "Other"];
 const GST_RATES = [0, 5, 12, 18, 28];
+const TRACKING_TYPES = [
+  { label: "IMEI", value: "IMEI" },
+  { label: "Serial Number", value: "SERIAL" },
+  { label: "Quantity Only", value: "QUANTITY" },
+] as const;
+const COLOR_OPTIONS = ["Black", "White", "Blue", "Green", "Gold", "Silver", "Purple", "Red"];
 
 interface Spec { key: string; value: string }
 
@@ -63,7 +69,7 @@ export default function AddProductScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
-  const { id, scannedBarcode } = useLocalSearchParams<{ id?: string; scannedBarcode?: string }>();
+  const { id } = useLocalSearchParams<{ id?: string }>();
 
   const isEdit = !!id;
   const isAdmin = user?.role === "admin";
@@ -76,17 +82,21 @@ export default function AddProductScreen() {
     name: "",
     brand: "",
     category: "Mobiles",
+    subcategory: "",
+    model: "",
+    variant: "",
+    trackingType: "IMEI",
     sellingPrice: "",
     mrp: "",
     costPrice: "",
-    stock: "",
     lowStockThreshold: "5",
     gstPercent: "18",
     hsnCode: "",
-    barcode: "",
-    internalCode: "",
+    sku: "",
     description: "",
   });
+  const [availableColors, setAvailableColors] = useState<string[]>([]);
+  const [customColor, setCustomColor] = useState("");
   const [specs, setSpecs] = useState<Spec[]>([{ key: "", value: "" }]);
 
   useEffect(() => {
@@ -97,31 +107,37 @@ export default function AddProductScreen() {
           name: p.name,
           brand: p.brand,
           category: p.category,
+          subcategory: p.subcategory || "",
+          model: p.model || "",
+          variant: p.variant || "",
+          trackingType: p.trackingType || (p.trackImei ? "IMEI" : p.trackSerial ? "SERIAL" : "QUANTITY"),
           sellingPrice: String(p.sellingPrice),
           mrp: String(p.mrp || ""),
           costPrice: String(p.costPrice || ""),
-          stock: String(p.stock),
           lowStockThreshold: String(p.lowStockThreshold),
           gstPercent: String(p.gstPercent),
           hsnCode: p.hsnCode || "",
-          barcode: p.barcode || "",
-          internalCode: p.internalCode || "",
+          sku: p.sku || p.internalCode || "",
           description: p.description || "",
         });
+        setAvailableColors(p.availableColors || []);
         if (p.specifications) setSpecs(p.specifications.length ? p.specifications : [{ key: "", value: "" }]);
         if (p.images) setImages(p.images);
       }).catch(() => { });
     }
   }, [id, isEdit]);
 
-  useEffect(() => {
-    if (scannedBarcode) {
-      setForm((prev) => ({ ...prev, barcode: scannedBarcode }));
-      router.setParams({ scannedBarcode: undefined });
-    }
-  }, [scannedBarcode, router]);
+
 
   const set = (k: keyof typeof form, v: string) => setForm((prev) => ({ ...prev, [k]: v }));
+  const toggleColor = (color: string) => {
+    setAvailableColors((prev) => prev.includes(color) ? prev.filter((c) => c !== color) : [...prev, color]);
+  };
+  const addCustomColor = () => {
+    const color = customColor.trim();
+    if (color && !availableColors.includes(color)) setAvailableColors((prev) => [...prev, color]);
+    setCustomColor("");
+  };
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -158,12 +174,6 @@ export default function AddProductScreen() {
 
   const removeImage = (i: number) => setImages((prev) => prev.filter((_, idx) => idx !== i));
 
-  const generateBarcode = () => {
-    const code = `GM${Date.now().toString().slice(-8)}`;
-    set("barcode", code);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
-
   const addSpec = () => setSpecs((prev) => [...prev, { key: "", value: "" }]);
   const setSpec = (i: number, field: "key" | "value", val: string) => {
     setSpecs((prev) => prev.map((s, idx) => idx === i ? { ...s, [field]: val } : s));
@@ -182,24 +192,23 @@ export default function AddProductScreen() {
 
     setSaving(true);
     try {
-      let finalBarcode = form.barcode?.trim();
-      if (!finalBarcode) {
-        finalBarcode = `GM${Date.now().toString().slice(-8)}`;
-      }
-
       const payload = {
         name: form.name.trim(),
         brand: form.brand.trim(),
         category: form.category,
+        subcategory: form.subcategory || undefined,
+        model: form.model || undefined,
+        variant: form.variant || undefined,
+        availableColors,
+        trackingType: form.trackingType,
         sellingPrice: Number(form.sellingPrice),
         mrp: form.mrp ? Number(form.mrp) : undefined,
         costPrice: isAdmin && form.costPrice ? Number(form.costPrice) : undefined,
-        stock: Number(form.stock || 0),
         lowStockThreshold: Number(form.lowStockThreshold || 5),
         gstPercent: Number(form.gstPercent || 0),
         hsnCode: form.hsnCode || undefined,
-        barcode: finalBarcode,
-        internalCode: form.internalCode || undefined,
+        sku: form.sku || undefined,
+        internalCode: form.sku || undefined,
         description: form.description || undefined,
         specifications: specs.filter((s) => s.key && s.value),
         images: images,
@@ -236,6 +245,15 @@ export default function AddProductScreen() {
           <Text style={[styles.section, { color: colors.primary }]}>Basic Info</Text>
           <Field label="Product name" value={form.name} onChange={(v) => set("name", v)} required />
           <Field label="Brand" value={form.brand} onChange={(v) => set("brand", v)} required />
+          <Field label="Subcategory" value={form.subcategory} onChange={(v) => set("subcategory", v)} />
+          <View style={styles.row2}>
+            <View style={{ flex: 1 }}>
+              <Field label="Model" value={form.model} onChange={(v) => set("model", v)} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Field label="Variant" value={form.variant} onChange={(v) => set("variant", v)} />
+            </View>
+          </View>
           <View style={styles.fieldGroup}>
             <Label text="Category" required />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catRow}>
@@ -245,6 +263,32 @@ export default function AddProductScreen() {
                 </Pressable>
               ))}
             </ScrollView>
+          </View>
+          <View style={styles.fieldGroup}>
+            <Label text="Available colors" />
+            <View style={styles.wrapRow}>
+              {COLOR_OPTIONS.map((c) => {
+                const active = availableColors.includes(c);
+                return (
+                  <Pressable key={c} style={[styles.catChip, { backgroundColor: active ? colors.primary : colors.bg3, borderColor: active ? colors.primary : colors.border2 }]} onPress={() => toggleColor(c)}>
+                    <Text style={{ color: active ? "#000" : colors.text2, fontSize: 12, fontFamily: "Inter_500Medium" }}>{c}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View style={styles.barcodeRow}>
+              <TextInput
+                style={[styles.input, { flex: 1, color: colors.foreground, backgroundColor: colors.bg3, borderColor: colors.border }]}
+                value={customColor}
+                onChangeText={setCustomColor}
+                placeholder="Add custom color"
+                placeholderTextColor={colors.text3}
+                onSubmitEditing={addCustomColor}
+              />
+              <Pressable style={[styles.autoBtn, { backgroundColor: colors.bg4, borderColor: colors.border2 }]} onPress={addCustomColor}>
+                <Ionicons name="add" size={16} color={colors.primary} />
+              </Pressable>
+            </View>
           </View>
 
           <Text style={[styles.section, { color: colors.primary }]}>Images</Text>
@@ -280,37 +324,27 @@ export default function AddProductScreen() {
           </View>
           <Field label="HSN Code" value={form.hsnCode} onChange={(v) => set("hsnCode", v)} />
 
-          <Text style={[styles.section, { color: colors.primary }]}>Inventory</Text>
-          <View style={styles.row2}>
-            <View style={{ flex: 1 }}>
-              <Field label="Stock qty" value={form.stock} onChange={(v) => set("stock", v)} keyboardType="numeric" />
+          <Text style={[styles.section, { color: colors.primary }]}>Inventory Setup</Text>
+          <View style={styles.fieldGroup}>
+            <Label text="Tracking type" required />
+            <View style={styles.trackingGrid}>
+              {TRACKING_TYPES.map((t) => {
+                const active = form.trackingType === t.value;
+                return (
+                  <Pressable key={t.value} style={[styles.trackBtn, { backgroundColor: active ? colors.primary : colors.bg3, borderColor: active ? colors.primary : colors.border2 }]} onPress={() => set("trackingType", t.value)}>
+                    <Text style={{ color: active ? "#000" : colors.text2, fontSize: 11, fontFamily: "Inter_700Bold" }}>{t.label}</Text>
+                  </Pressable>
+                );
+              })}
             </View>
+          </View>
+          <View style={styles.row2}>
             <View style={{ flex: 1 }}>
               <Field label="Low stock alert" value={form.lowStockThreshold} onChange={(v) => set("lowStockThreshold", v)} keyboardType="numeric" />
             </View>
           </View>
-          <View style={styles.fieldGroup}>
-            <Label text="Barcode" />
-            <View style={styles.barcodeRow}>
-              <TextInput
-                style={[styles.input, { flex: 1, color: colors.foreground, backgroundColor: colors.bg3, borderColor: colors.border }]}
-                value={form.barcode}
-                onChangeText={(v) => set("barcode", v)}
-                placeholder="Scan or enter barcode"
-                placeholderTextColor={colors.text3}
-              />
-              <Pressable
-                style={[styles.autoBtn, { backgroundColor: colors.bg4, borderColor: colors.border2 }]}
-                onPress={() => router.push({ pathname: "/staff/barcode-scanner", params: { returnMode: "barcode", returnPath: "/staff/add-product", productId: id || "" } })}
-              >
-                <Ionicons name="scan" size={16} color={colors.primary} />
-              </Pressable>
-              <Pressable style={[styles.autoBtn, { backgroundColor: colors.bg4, borderColor: colors.border2 }]} onPress={generateBarcode}>
-                <Text style={{ color: colors.primary, fontSize: 11, fontFamily: "Inter_600SemiBold" }}>Auto</Text>
-              </Pressable>
-            </View>
-          </View>
-          <Field label="Internal code / SKU" value={form.internalCode} onChange={(v) => set("internalCode", v)} />
+
+          <Field label="SKU" value={form.sku} onChange={(v) => set("sku", v)} />
 
           <Text style={[styles.section, { color: colors.primary }]}>Specifications</Text>
           {specs.map((s, i) => (
@@ -382,9 +416,12 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 11, fontSize: 13, fontFamily: "Inter_400Regular" },
   textarea: { borderWidth: 1, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 11, fontSize: 13, fontFamily: "Inter_400Regular", minHeight: 80 },
   catRow: { gap: 8 },
+  wrapRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   catChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
   gstRow: { flexDirection: "row", gap: 8 },
   gstBtn: { flex: 1, borderWidth: 1, borderRadius: 8, paddingVertical: 8, alignItems: "center" },
+  trackingGrid: { flexDirection: "row", gap: 8 },
+  trackBtn: { flex: 1, borderWidth: 1, borderRadius: 8, paddingVertical: 9, alignItems: "center" },
   row2: { flexDirection: "row", gap: 10 },
   barcodeRow: { flexDirection: "row", gap: 8, alignItems: "center" },
   autoBtn: { paddingHorizontal: 14, paddingVertical: 11, borderRadius: 9, borderWidth: 1 },

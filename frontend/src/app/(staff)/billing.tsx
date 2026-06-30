@@ -19,6 +19,8 @@ import CustomerPicker from "@/components/CustomerPicker";
 import { useCart } from "@/context/CartContext";
 import { useColors } from "@/hooks/useColors";
 import { apiGet, apiPost, Customer, Invoice, Product } from "@/services/api";
+import { consumeResolvedProduct, consumeTargetedScanResult } from "@/utils/scanStore";
+import { useNavigation } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
 
 const PAYMENT_MODES = ["cash", "upi", "card", "credit"] as const;
@@ -35,16 +37,16 @@ export default function BillingScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const params = useLocalSearchParams<{ scannedProductId?: string; mode?: string }>();
+  const params = useLocalSearchParams<{ mode?: string }>();
   const isQuotationMode = params.mode === "quotation";
-  const { items, addItem, updateQty, clearCart, subtotal, gstAmount, total } = useCart();
+  const { items, addItem, updateQty, removeItem, removeIdentifier, clearCart, subtotal, gstAmount, total } = useCart();
+  const navigation = useNavigation();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [searching, setSearching] = useState(false);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("cash");
   const [placing, setPlacing] = useState<null | "paid" | "unpaid">(null);
-  const [barcodeText, setBarcodeText] = useState("");
   const [customer, setCustomer] = useState<Customer | null>(null);
 
   const { data: recentInvoices = [] } = useQuery<Invoice[]>({
@@ -55,17 +57,30 @@ export default function BillingScreen() {
     },
   });
 
-  const prevScannedId = useRef<string | undefined>(undefined);
+  const prevScanTime = useRef<string | undefined>(undefined);
 
   /* ── Handle scanned product returned from camera screen ── */
   useEffect(() => {
-    const sid = params.scannedProductId;
-    if (!sid || sid === prevScannedId.current) return;
-    prevScannedId.current = sid;
-    apiGet<Product>(`/products/${sid}`)
-      .then((r) => { addItem(r.data); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); })
-      .catch(() => Alert.alert("Error", "Could not load scanned product."));
-  }, [params.scannedProductId]);
+    const unsubscribe = navigation.addListener('focus', () => {
+      // 1. Check if a full product was resolved from a general scan
+      const resolved = consumeResolvedProduct();
+      if (resolved && resolved.product) {
+        addItem(resolved.product, resolved.identifier);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      
+      // 2. Check if a raw code (IMEI/Serial) was scanned for a specific item
+      const targeted = consumeTargetedScanResult();
+      if (targeted && targeted.code && targeted.targetId) {
+        const item = items.find(i => i.product._id === targeted.targetId);
+        if (item) {
+          addItem(item.product, targeted.code);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+      }
+    });
+    return unsubscribe;
+  }, [navigation, addItem, items]);
 
   const fmt = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 
@@ -85,16 +100,24 @@ export default function BillingScreen() {
     }, 300);
   };
 
-  /* ── Manual barcode text lookup ── */
-  const handleBarcodeSearch = async () => {
-    if (!barcodeText.trim()) return;
+  const handleUnifiedLookup = async () => {
+    const query = searchQuery.trim();
+    if (!query) return;
     try {
-      const res = await apiGet<Product>(`/products/barcode/${barcodeText.trim()}`);
-      addItem(res.data);
-      setBarcodeText("");
+      const res = await apiGet<Product & { foundIdentifier?: { code: string } }>(`/products/barcode/${encodeURIComponent(query)}`);
+      addItem(res.data, res.data.foundIdentifier?.code);
+      setSearchQuery("");
+      setSearchResults([]);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
-      Alert.alert("Not found", "No product matches that barcode.");
+      if (searchResults.length === 1) {
+        addItem(searchResults[0]);
+        setSearchQuery("");
+        setSearchResults([]);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        Alert.alert("Not found", "No product, barcode, IMEI, or serial number matches that entry.");
+      }
     }
   };
 
@@ -136,7 +159,12 @@ export default function BillingScreen() {
         router.replace(`/staff/quotation/${res.data._id}`);
       } else {
         const res = await apiPost<{ _id: string }>("/billing/invoices", {
-          items: items.map((i) => ({ productId: i.product._id, qty: i.qty, price: i.product.sellingPrice })),
+          items: items.map((i) => ({ 
+            productId: i.product._id, 
+            qty: i.qty, 
+            price: i.product.sellingPrice,
+            identifiers: i.identifiers
+          })),
           paymentMode: paymentStatus === "unpaid" ? "credit" : paymentMode,
           paymentStatus,
           ...(customer ? { customerId: customer._id } : {}),
@@ -199,42 +227,29 @@ export default function BillingScreen() {
             <Ionicons name="barcode-outline" size={24} color={colors.primary} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.scanBannerTitle, { color: colors.primary }]}>Scan barcode</Text>
-            <Text style={[styles.scanBannerSub, { color: colors.text3 }]}>Point camera at product barcode</Text>
+            <Text style={[styles.scanBannerTitle, { color: colors.primary }]}>Scan product or device</Text>
+            <Text style={[styles.scanBannerSub, { color: colors.text3 }]}>Barcode, IMEI, or serial number</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.primary} />
         </Pressable>
 
-        {/* ── Manual barcode (optional, kept for utility but styled cleanly) ── */}
-        <View style={[styles.barcodeBox, { backgroundColor: colors.bg4 }]}>
-          <Ionicons name="keypad" size={16} color={colors.text3} />
-          <TextInput
-            style={[styles.barcodeInput, { color: colors.foreground }]}
-            placeholder="Or type barcode manually..."
-            placeholderTextColor={colors.text3}
-            value={barcodeText}
-            onChangeText={setBarcodeText}
-            onSubmitEditing={handleBarcodeSearch}
-            returnKeyType="search"
-          />
-          {barcodeText.length > 0 && (
-            <Pressable onPress={() => { handleBarcodeSearch(); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }} hitSlop={8} style={styles.searchActionBtn}>
-              <Text style={{ color: colors.primary, fontWeight: "600", fontSize: 12 }}>Enter</Text>
-            </Pressable>
-          )}
-        </View>
-
-        {/* ── Product search ── */}
         <View style={[styles.searchBox, { backgroundColor: colors.bg4 }]}>
-          <Ionicons name="search" size={18} color={colors.text3} />
+          <Ionicons name="scan" size={18} color={colors.text3} />
           <TextInput
             style={[styles.searchInput, { color: colors.foreground }]}
-            placeholder="Search by product name"
+            placeholder="Search or scan: name, barcode, IMEI, serial"
             placeholderTextColor={colors.text3}
             value={searchQuery}
             onChangeText={handleSearch}
+            onSubmitEditing={handleUnifiedLookup}
+            returnKeyType="search"
           />
           {searching && <ActivityIndicator size="small" color={colors.primary} />}
+          {searchQuery.length > 0 && !searching && (
+            <Pressable onPress={() => { handleUnifiedLookup(); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }} hitSlop={8} style={styles.searchActionBtn}>
+              <Text style={{ color: colors.primary, fontWeight: "600", fontSize: 12 }}>Enter</Text>
+            </Pressable>
+          )}
           {searchQuery.length > 0 && !searching && (
             <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
               <Ionicons name="close-circle" size={18} color={colors.text3} />
@@ -283,46 +298,79 @@ export default function BillingScreen() {
           </View>
         ) : (
           <View style={[styles.cartBox, { borderColor: colors.border }]}>
-            {items.map((item, idx) => (
-              <View
-                key={item.product._id}
-                style={[
-                  styles.cartRow,
-                  {
-                    borderBottomColor: colors.border,
-                    borderBottomWidth: idx < items.length - 1 ? 1 : 0,
-                  },
-                ]}
-              >
-                  <View style={[styles.cartThumb, { backgroundColor: colors.bg4 }]}>
-                    <Ionicons name="cube-outline" size={16} color={colors.text2} />
+            {items.map((item, idx) => {
+              const isFixedQty = item.product.trackImei || item.product.trackSerial;
+              return (
+                <View key={item.id} style={{ borderBottomColor: colors.border, borderBottomWidth: idx < items.length - 1 ? 1 : 0 }}>
+                  <View style={[styles.cartRow]}>
+                    <View style={[styles.cartThumb, { backgroundColor: colors.bg4 }]}>
+                      <Ionicons name="cube-outline" size={16} color={colors.text2} />
+                    </View>
+                    <View style={styles.cartInfo}>
+                      <Text style={[styles.cartName, { color: colors.foreground }]} numberOfLines={1}>
+                        {item.product.name}
+                      </Text>
+                      <Text style={[styles.cartSub, { color: colors.text3 }]}>
+                        {fmt(item.product.sellingPrice)} × {item.qty}
+                        {item.qty > 1 ? ` = ${fmt(item.product.sellingPrice * item.qty)}` : ""}
+                      </Text>
+                    </View>
+                  <View style={styles.qtyRow}>
+                    {!isFixedQty && (
+                      <Pressable
+                        style={[styles.qtyBtn, { borderColor: colors.border2 }]}
+                        onPress={() => updateQty(item.id, item.qty - 1)}
+                      >
+                        <Ionicons name="remove" size={14} color={colors.text2} />
+                      </Pressable>
+                    )}
+                    <Text style={[styles.qtyText, { color: colors.foreground }]}>{item.qty}</Text>
+                    {!isFixedQty && (
+                      <Pressable
+                        style={[styles.qtyBtn, { borderColor: colors.border2 }]}
+                        onPress={() => updateQty(item.id, item.qty + 1)}
+                      >
+                        <Ionicons name="add" size={14} color={colors.text2} />
+                      </Pressable>
+                    )}
                   </View>
-                  <View style={styles.cartInfo}>
-                    <Text style={[styles.cartName, { color: colors.foreground }]} numberOfLines={1}>
-                      {item.product.name}
-                    </Text>
-                    <Text style={[styles.cartSub, { color: colors.text3 }]}>
-                      {fmt(item.product.sellingPrice)} × {item.qty}
-                      {item.qty > 1 ? ` = ${fmt(item.product.sellingPrice * item.qty)}` : ""}
-                    </Text>
-                  </View>
-                <View style={styles.qtyRow}>
-                  <Pressable
-                    style={[styles.qtyBtn, { borderColor: colors.border2 }]}
-                    onPress={() => updateQty(item.product._id, item.qty - 1)}
-                  >
-                    <Ionicons name="remove" size={14} color={colors.text2} />
-                  </Pressable>
-                  <Text style={[styles.qtyText, { color: colors.foreground }]}>{item.qty}</Text>
-                  <Pressable
-                    style={[styles.qtyBtn, { borderColor: colors.border2 }]}
-                    onPress={() => updateQty(item.product._id, item.qty + 1)}
-                  >
-                    <Ionicons name="add" size={14} color={colors.text2} />
-                  </Pressable>
                 </View>
+                
+                {/* Identifiers List */}
+                {(item.product.trackImei || item.product.trackSerial) && (
+                  <View style={{ paddingHorizontal: 12, paddingBottom: 12, gap: 4 }}>
+                    {item.identifiers && item.identifiers.map(id => (
+                      <View key={id} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bg3, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start', gap: 6 }}>
+                        <Ionicons name="barcode-outline" size={12} color={colors.text2} />
+                        <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: colors.foreground }}>{id}</Text>
+                        <Pressable onPress={() => removeIdentifier(item.id, id)} hitSlop={6}>
+                           <Ionicons name="close" size={14} color={colors.redText} />
+                        </Pressable>
+                      </View>
+                    ))}
+                    {(!item.identifiers || item.identifiers.length < item.qty) && (
+                      <Pressable 
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}
+                        onPress={() => router.push({ pathname: "/staff/barcode-scanner", params: { returnMode: "barcode", productId: item.product._id, expectedCategory: item.product.trackImei ? "IMEI" : "Serial" } })}
+                      >
+                         <Ionicons name="scan" size={14} color={colors.primary} />
+                         <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: colors.primary }}>
+                           Scan {item.qty - (item.identifiers?.length || 0)} more {item.product.trackImei ? "IMEI" : "Serial"}
+                         </Text>
+                      </Pressable>
+                    )}
+                  </View>
+                )}
+                {isFixedQty && (
+                  <View style={{ paddingHorizontal: 12, paddingBottom: 12 }}>
+                    <Pressable onPress={() => removeItem(item.id)}>
+                      <Text style={{ color: colors.destructive, fontSize: 12, fontWeight: "600" }}>Remove Item</Text>
+                    </Pressable>
+                  </View>
+                )}
               </View>
-            ))}
+            )
+            })}
           </View>
         )}
 

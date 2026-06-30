@@ -15,6 +15,7 @@ const inquiryRoutes = require('./inquiry.routes');
 const bannerRoutes = require('./banner.routes');
 const settingsRoutes = require('./settings.routes');
 const wishlistRoutes = require('./wishlist.routes');
+const cashRoutes = require('./cash.routes');
 
 // Stock routes (inline since it's simple)
 const { authenticate } = require('../middleware/auth.middleware');
@@ -42,6 +43,7 @@ stockRouter.use(authenticate, requireRole(['staff', 'admin']));
  *         description: Stock movement recorded
  */
 stockRouter.post('/movement', createMovement);
+stockRouter.post('/movements', createMovement);
 
 /**
  * @swagger
@@ -62,6 +64,10 @@ stockRouter.post('/movement', createMovement);
  *         description: List of stock movements
  */
 stockRouter.get('/movements/:productId', getMovements);
+stockRouter.get('/movements', (req, res, next) => {
+  req.params.productId = req.query.productId;
+  return getMovements[1](req, res, next);
+});
 
 // Mount all routes
 router.use('/auth', authRoutes);
@@ -79,8 +85,8 @@ router.use('/inquiries', inquiryRoutes);
 router.use('/banners', bannerRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/wishlist', wishlistRoutes);
+router.use('/cash', cashRoutes);
 
-// Alias for frontend staff requests
 // Alias for frontend staff requests
 const { listStaff, inviteStaff, updateUserRole, updateUser, removeStaff } = require('../controllers/user.controller');
 router.get('/staff', authenticate, requireRole(['staff', 'admin']), listStaff);
