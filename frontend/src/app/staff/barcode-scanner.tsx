@@ -77,8 +77,6 @@ export default function BarcodeScannerScreen() {
         // If an expected category (IMEI/Serial) is set and it doesn't match, ignore it completely
         return;
       }
-
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       
       const isRecommended = expectedCategory ? info.category === expectedCategory : info.category === "EAN/UPC";
 
@@ -111,7 +109,6 @@ export default function BarcodeScannerScreen() {
     if (!dataToUse) return;
     
     setIsScanning(false);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     if (isRawMode) {
       if (productId) {
@@ -137,6 +134,7 @@ export default function BarcodeScannerScreen() {
         }
       }
       setResolvedProduct(product, finalCode);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.canGoBack() ? router.back() : router.replace('/');
     } catch {
       setError(`No product found for barcode "${dataToUse}"`);

@@ -41,7 +41,7 @@ function AuthGuard() {
       if (inAuth || inCustomer) router.replace("/(staff)");
     } else {
       // logged-in customer OR guest — both allowed in (tabs)
-      if (inAuth || inStaff) router.replace("/(tabs)");
+      if (inAuth || inStaff || (segments.length as number) === 0) router.replace("/(tabs)");
     }
   }, [user, isGuest, isLoading, segments]);
 

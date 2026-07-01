@@ -19,7 +19,7 @@ export default function WishlistScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { items, removeItem } = useWishlist();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   const handleEnquireAll = async () => {
     if (items.length === 0) return;
@@ -67,7 +67,7 @@ export default function WishlistScreen() {
           <Text style={[styles.guestSub, { color: colors.text3 }]}>Sign in to save and manage your favorite products</Text>
           <Pressable
             style={[styles.signInBtn, { backgroundColor: colors.primary }]}
-            onPress={() => router.push("/(auth)")}
+            onPress={() => logout()}
           >
             <Text style={{ fontFamily: "Inter_700Bold", color: "#000", fontSize: 14 }}>Sign In</Text>
           </Pressable>

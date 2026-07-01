@@ -202,8 +202,15 @@ export default function KhataScreen() {
                 <Text style={[styles.phone, { color: colors.text3 }]}>{c.phone}</Text>
               </View>
               {(c.totalDue || 0) > 0 ? (
-                <View style={[styles.dueBadge, { backgroundColor: colors.redBg }]}>
-                  <Text style={[styles.dueText, { color: colors.redText }]}>{fmt(c.totalDue!)}</Text>
+                <View style={{ alignItems: "flex-end" }}>
+                  <View style={[styles.dueBadge, { backgroundColor: colors.redBg }]}>
+                    <Text style={[styles.dueText, { color: colors.redText }]}>{fmt(c.totalDue!)}</Text>
+                  </View>
+                  {c.nextPaymentDate && (
+                    <Text style={{ fontSize: 10, color: colors.text3, marginTop: 4 }}>
+                      Due: {new Date(c.nextPaymentDate).toLocaleDateString()}
+                    </Text>
+                  )}
                 </View>
               ) : (
                 <View style={[styles.dueBadge, { backgroundColor: colors.greenBg }]}>

@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
-import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Share, StyleSheet, Text, View, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
@@ -28,6 +28,14 @@ export default function InvoiceScreen() {
     enabled: !!id,
   });
 
+  const { data: settings } = useQuery({
+    queryKey: ["settings"],
+    queryFn: async () => {
+      const res = await apiGet<any>("/settings");
+      return res.data;
+    },
+  });
+
   const queryClient = useQueryClient();
   const [markingPaid, setMarkingPaid] = React.useState(false);
 
@@ -36,15 +44,13 @@ export default function InvoiceScreen() {
   const fmt = (n: number) => `₹${n.toLocaleString("en-IN")}`;
   const fmtDate = (d: string) =>
     new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-  const fmtTime = (d: string) =>
-    new Date(d).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 
   const handleShare = () => {
     if (!inv) return;
     const lines = [
       `*Invoice ${inv.invoiceNumber}*`,
       `Date: ${fmtDate(inv.createdAt)}`,
-      `Customer: ${inv.customer?.name || "Walk-in"}`,
+      `Customer: ${inv.customer?.name || inv.customerName || "Walk-in"}`,
       ``,
       ...inv.items.map((i) => `• ${i.product.name} × ${i.qty} = ${fmt(i.subtotal)}`),
       ``,
@@ -53,7 +59,7 @@ export default function InvoiceScreen() {
       `*Total: ${fmt(inv.total)}*`,
       `Payment: ${inv.paymentMode.toUpperCase()}`,
       ``,
-      `Goldy Mobiles, Indore`,
+      `Goldy Mobiles`,
     ].join("\n");
     Share.share({ message: lines });
   };
@@ -144,6 +150,19 @@ export default function InvoiceScreen() {
     );
   }
 
+  const shopName = settings?.shopName || "Goldy Mobiles";
+  const addressStr = settings?.address ? `${settings.address.street || ''} ${settings.address.city || ''} ${settings.address.state || ''} ${settings.address.pin || ''}`.trim() : "Vijay Nagar, Indore";
+  const phone = settings?.phone || "";
+  const gstin = settings?.gstNumber || "";
+  const pan = settings?.panNumber || "";
+  const bankDetails = settings?.bankDetails;
+  const terms = settings?.termsAndConditions || "1. Customer will pay the GST\n2. Customer will pay the Delivery charges\n3. Pay due amount within 15 days";
+
+  const totalQty = inv.items.reduce((sum, item) => sum + item.qty, 0);
+
+  // Modern Accent color
+  const accentColor = '#3b82f6'; // Clean soft blue
+  const accentLight = '#eff6ff';
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -153,7 +172,7 @@ export default function InvoiceScreen() {
           <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace('/')} style={styles.iconBtn}>
             <Ionicons name="arrow-back" size={24} color={colors.text3} />
           </Pressable>
-          <Text style={[styles.topTitle, { color: colors.foreground }]}>Invoice #{inv.invoiceNumber}</Text>
+          <Text style={[styles.topTitle, { color: colors.foreground }]}>Invoice Details</Text>
         </View>
         {isUnpaid ? (
           <View style={[styles.paidBadge, { backgroundColor: "rgba(249, 115, 22, 0.15)" }]}>
@@ -166,81 +185,132 @@ export default function InvoiceScreen() {
         )}
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 100 }}>
-        {/* ── Shop & Invoice Header ── */}
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={[styles.shopName, { color: colors.primary }]}>⚡ Goldy Mobiles</Text>
-            <Text style={[styles.shopAddress, { color: colors.text3 }]}>Vijay Nagar, Indore — MP 452010</Text>
-            <Text style={[styles.shopGstin, { color: colors.text3 }]}>GSTIN: 23ABCDE1234F1Z5</Text>
-          </View>
-          <View style={styles.invoiceMeta}>
-            <Text style={[styles.metaInv, { color: colors.text2 }]}>{inv.invoiceNumber}</Text>
-            <Text style={[styles.metaDate, { color: colors.text3 }]}>{fmtDate(inv.createdAt)}</Text>
-            <Text style={[styles.metaTime, { color: colors.text3 }]}>{fmtTime(inv.createdAt)}</Text>
-          </View>
-        </View>
-
-        <View style={[styles.divider, { backgroundColor: colors.border, marginVertical: 14 }]} />
-
-        {/* ── Bill To ── */}
-        <Text style={[styles.billToText, { color: colors.text3 }]}>
-          Bill to:{" "}
-          <Text style={{ color: colors.foreground, fontWeight: "600" }}>
-            {inv.customer?.name || "Walk-in Customer"}
-          </Text>
-          {inv.customer?.phone ? ` · ${inv.customer.phone}` : ""}
-        </Text>
-
-        <View style={{ marginTop: 24 }}>
-          {/* ── Table Header ── */}
-          <View style={[styles.tableHeader, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.thText, { color: colors.text3 }]}>ITEM</Text>
-            <Text style={[styles.thText, { color: colors.text3 }]}>AMT</Text>
-          </View>
-
-          {/* ── Items List ── */}
-          {inv.items.map((item, i) => {
-            // For mockup purposes, if product.gstPercent isn't there, fallback to 18
-            const gst = item.product?.gstPercent || 18;
-            return (
-              <View key={i} style={styles.listRow}>
-                <View style={styles.listMain}>
-                  <Text style={[styles.listTitle, { color: colors.foreground }]} numberOfLines={1}>
-                    {item.product.name}
-                  </Text>
-                  <Text style={[styles.listSub, { color: colors.text3 }]}>
-                    {fmt(item.price)} × {item.qty} · GST {gst}%
-                  </Text>
-                </View>
-                <Text style={[styles.listPrice, { color: colors.foreground }]}>{fmt(item.subtotal)}</Text>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 4, paddingTop: 16, paddingBottom: insets.bottom + 100 }}>
+        {/* Paper Bill Container */}
+        <View style={[styles.paper, { borderColor: colors.border2 }]}>
+          {/* Header Row: Logo/Shop on left, Invoice Info on right */}
+          <View style={styles.headerRow}>
+            <View style={styles.shopBlock}>
+              <Image source={require('../../../../assets/logo.png')} style={styles.logo} resizeMode="contain" />
+              <View>
+                <Text style={[styles.shopName, { color: accentColor }]}>{shopName}</Text>
+                <Text style={styles.shopMeta}>{addressStr}</Text>
+                <Text style={styles.shopMeta}>{phone ? `Phone: ${phone}` : ''}</Text>
+                {gstin ? <Text style={styles.shopMeta}>GSTIN: {gstin}</Text> : null}
+                {pan ? <Text style={styles.shopMeta}>PAN: {pan}</Text> : null}
               </View>
-            );
-          })}
-        </View>
+            </View>
 
-        {/* ── Totals Box ── */}
-        <View style={[styles.totalsBox, { backgroundColor: colors.bg3, borderColor: colors.border }]}>
-          <View style={styles.totalRow}>
-            <Text style={[styles.totalLbl, { color: colors.text2 }]}>Subtotal</Text>
-            <Text style={[styles.totalVal, { color: colors.foreground }]}>{fmt(inv.subtotal)}</Text>
+            <View style={styles.invoiceInfoBlock}>
+              <Text style={styles.invoiceLbl}>Invoice No.</Text>
+              <Text style={[styles.invoiceVal, { color: accentColor }]}>{inv.invoiceNumber}</Text>
+              
+              <Text style={[styles.invoiceLbl, { marginTop: 8 }]}>Date</Text>
+              <Text style={styles.invoiceVal}>{fmtDate(inv.createdAt)}</Text>
+            </View>
           </View>
-          <View style={styles.totalRow}>
-            <Text style={[styles.totalLbl, { color: colors.text2 }]}>CGST 9%</Text>
-            <Text style={[styles.totalVal, { color: colors.foreground }]}>{fmt(inv.gstAmount / 2)}</Text>
+
+          <View style={styles.divider} />
+
+          {/* Bill To */}
+          {(inv.customer?.name || inv.customerName) && (
+            <View style={styles.billToSection}>
+              <Text style={styles.sectionTitle}>Billed To:</Text>
+              <Text style={styles.billToName}>{inv.customer?.name || inv.customerName}</Text>
+              {(inv.customer?.phone || inv.customerPhone) ? <Text style={styles.billToMeta}>{inv.customer?.phone || inv.customerPhone}</Text> : null}
+            </View>
+          )}
+
+          {/* Items Table */}
+          <View style={[styles.table, { borderColor: colors.border2 }]}>
+            <View style={[styles.thRow, { backgroundColor: accentLight }]}>
+              <Text style={[styles.thCell, { flex: 0.5 }]}>#</Text>
+              <Text style={[styles.thCell, { flex: 3 }]}>Item</Text>
+              <Text style={[styles.thCell, { flex: 1, textAlign: 'center' }]}>Qty</Text>
+              <Text style={[styles.thCell, { flex: 1.5, textAlign: 'right' }]}>Rate</Text>
+              <Text style={[styles.thCell, { flex: 1.5, textAlign: 'right' }]}>Amount</Text>
+            </View>
+            
+            {inv.items.map((item, i) => (
+              <View key={i} style={[styles.tdRow, { borderBottomColor: colors.border2 }]}>
+                <Text style={[styles.tdCell, { flex: 0.5 }]}>{i + 1}</Text>
+                <View style={{ flex: 3 }}>
+                  <Text style={styles.tdItemName}>{item.product.name}</Text>
+                  <Text style={styles.tdItemSub}>GST {item.product?.gstPercent || 18}%</Text>
+                </View>
+                <Text style={[styles.tdCell, { flex: 1, textAlign: 'center' }]}>{item.qty}</Text>
+                <Text style={[styles.tdCell, { flex: 1.5, textAlign: 'right' }]}>{fmt(item.price)}</Text>
+                <Text style={[styles.tdCell, { flex: 1.5, textAlign: 'right', fontWeight: '600' }]}>{fmt(item.subtotal)}</Text>
+              </View>
+            ))}
+
+            <View style={styles.totalsContainer}>
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLbl}>Subtotal</Text>
+                <Text style={styles.totalVal}>{fmt(inv.subtotal)}</Text>
+              </View>
+              {(inv.discount || 0) > 0 && (
+                <View style={styles.totalRow}>
+                  <Text style={styles.totalLbl}>Discount</Text>
+                  <Text style={[styles.totalVal, { color: '#ef4444' }]}>-{fmt(inv.discount || 0)}</Text>
+                </View>
+              )}
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLbl}>Total Tax (GST)</Text>
+                <Text style={styles.totalVal}>{fmt(inv.gstAmount)}</Text>
+              </View>
+              
+              <View style={styles.grandTotalRow}>
+                <Text style={styles.grandTotalLbl}>Grand Total</Text>
+                <Text style={styles.grandTotalVal}>{fmt(inv.total)}</Text>
+              </View>
+
+              {isUnpaid ? (
+                <>
+                  <View style={styles.totalRow}>
+                    <Text style={styles.totalLbl}>Partial Amount Paid</Text>
+                    <Text style={styles.totalVal}>{fmt(inv.paidAmount)}</Text>
+                  </View>
+
+                  <View style={[styles.totalRow, { marginTop: 4 }]}>
+                    <Text style={[styles.totalLbl, { color: '#ef4444', fontWeight: '700' }]}>Due Balance</Text>
+                    <Text style={[styles.totalVal, { color: '#ef4444', fontWeight: '700' }]}>{fmt(inv.dueAmount)}</Text>
+                  </View>
+                </>
+              ) : (
+                <View style={styles.totalRow}>
+                  <Text style={styles.totalLbl}>Amount Paid</Text>
+                  <Text style={styles.totalVal}>{fmt(inv.total)}</Text>
+                </View>
+              )}
+              
+              {inv.dueDate && (
+                <View style={styles.totalRow}>
+                  <Text style={styles.totalLbl}>Next Due Date</Text>
+                  <Text style={styles.totalVal}>{fmtDate(inv.dueDate)}</Text>
+                </View>
+              )}
+            </View>
           </View>
-          <View style={styles.totalRow}>
-            <Text style={[styles.totalLbl, { color: colors.text2 }]}>SGST 9%</Text>
-            <Text style={[styles.totalVal, { color: colors.foreground }]}>{fmt(inv.gstAmount / 2)}</Text>
-          </View>
-          <View style={[styles.divider, { backgroundColor: colors.border, marginVertical: 8 }]} />
-          <View style={styles.totalRowGrand}>
-            <Text style={[styles.grandLbl, { color: colors.foreground }]}>Total</Text>
-            <Text style={[styles.grandVal, { color: colors.foreground }]}>{fmt(inv.total)}</Text>
-          </View>
-          <View style={styles.totalRow}>
-            <Text style={[styles.totalLbl, { color: colors.text2 }]}>Paid — {inv.paymentMode.charAt(0).toUpperCase() + inv.paymentMode.slice(1)}</Text>
-            <Text style={styles.paidVal}>{fmt(inv.total)} ✓</Text>
+
+          {/* Footer */}
+          <View style={styles.footerSection}>
+            <View style={styles.footerCol}>
+              <Text style={styles.sectionTitle}>Notes & Bank Details</Text>
+              {bankDetails?.bankName ? (
+                <View style={{ marginTop: 4 }}>
+                  <Text style={styles.footerMeta}>Bank: {bankDetails.bankName}</Text>
+                  <Text style={styles.footerMeta}>A/C: {bankDetails.accountNumber}</Text>
+                  <Text style={styles.footerMeta}>IFSC: {bankDetails.ifscCode}</Text>
+                </View>
+              ) : (
+                <Text style={styles.footerMeta}>Thank you for your business!</Text>
+              )}
+            </View>
+            <View style={[styles.footerCol, { borderLeftWidth: 1, borderLeftColor: colors.border2, paddingLeft: 12 }]}>
+              <Text style={styles.sectionTitle}>Terms & Conditions</Text>
+              <Text style={[styles.footerMeta, { marginTop: 4 }]}>{terms}</Text>
+            </View>
           </View>
         </View>
 
@@ -272,7 +342,7 @@ export default function InvoiceScreen() {
             onPress={handleWhatsApp}
           >
             <Ionicons name="logo-whatsapp" size={16} color="#fff" />
-            <Text style={styles.btnWaText}>Send to customer</Text>
+            <Text style={styles.btnWaText}>Send</Text>
           </Pressable>
           <Pressable
             style={[styles.btnSm, { backgroundColor: colors.bg2, borderColor: colors.border2 }]}
@@ -325,53 +395,180 @@ const styles = StyleSheet.create({
   paidBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   paidBadgeText: { fontSize: 11, fontWeight: "700", fontFamily: "Inter_700Bold" },
 
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  shopName: { fontSize: 16, fontWeight: "800", fontFamily: "Inter_700Bold", marginBottom: 2 },
-  shopAddress: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
-  shopGstin: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
-  invoiceMeta: { alignItems: "flex-end" },
-  metaInv: { fontSize: 12, fontWeight: "700", fontFamily: "Inter_700Bold", marginBottom: 2 },
-  metaDate: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
-  metaTime: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
-
-  divider: { height: 1 },
-  billToText: { fontSize: 13, fontFamily: "Inter_400Regular" },
-
-  tableHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 6,
-    borderBottomWidth: 1,
+  paper: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  shopBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  logo: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+  },
+  shopName: {
+    fontSize: 20,
+    fontWeight: '800',
+    fontFamily: 'Inter_700Bold',
     marginBottom: 4,
   },
-  thText: { fontSize: 11, fontWeight: "700", fontFamily: "Inter_700Bold", letterSpacing: 0.5 },
-
-  listRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 10,
+  shopMeta: {
+    fontSize: 11,
+    color: '#64748b',
+    fontFamily: 'Inter_400Regular',
+    lineHeight: 16,
   },
-  listMain: { flex: 1, paddingRight: 12 },
-  listTitle: { fontSize: 14, fontWeight: "600", fontFamily: "Inter_600SemiBold", marginBottom: 4 },
-  listSub: { fontSize: 12, fontFamily: "Inter_400Regular" },
-  listPrice: { fontSize: 14, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
-
-  totalsBox: {
+  invoiceInfoBlock: {
+    alignItems: 'flex-end',
+  },
+  invoiceLbl: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  invoiceVal: {
+    fontSize: 10,
+    fontWeight: '700',
+    fontFamily: 'Inter_700Bold',
+    marginTop: 2,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#f1f5f9',
+    marginVertical: 16,
+  },
+  billToSection: {
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  billToName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0f172a',
+  },
+  billToMeta: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  table: {
     borderWidth: 1,
     borderRadius: 12,
+    overflow: 'hidden',
+  },
+  thRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  thCell: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  tdRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  tdCell: {
+    fontSize: 12,
+    color: '#1e293b',
+  },
+  tdItemName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0f172a',
+    marginBottom: 2,
+  },
+  tdItemSub: {
+    fontSize: 11,
+    color: '#64748b',
+  },
+  totalsContainer: {
     padding: 16,
-    marginTop: 24,
+    backgroundColor: '#f8fafc',
     gap: 8,
   },
-  totalRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  totalRowGrand: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 2 },
-  totalLbl: { fontSize: 13, fontFamily: "Inter_500Medium" },
-  totalVal: { fontSize: 13, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
-  grandLbl: { fontSize: 18, fontWeight: "800", fontFamily: "Inter_700Bold" },
-  grandVal: { fontSize: 18, fontWeight: "800", fontFamily: "Inter_700Bold" },
-  paidVal: { fontSize: 12, fontWeight: "800", fontFamily: "Inter_700Bold", color: "#22c55e" },
-
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  totalLbl: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '500',
+  },
+  totalVal: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0f172a',
+  },
+  grandTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginVertical: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  grandTotalLbl: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  grandTotalVal: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  footerSection: {
+    flexDirection: 'row',
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  footerCol: {
+    flex: 1,
+  },
+  footerMeta: {
+    fontSize: 10,
+    color: '#64748b',
+    lineHeight: 14,
+  },
+  
   actionsRow: {
     flexDirection: "row",
     gap: 8,

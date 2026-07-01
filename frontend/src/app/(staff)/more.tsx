@@ -70,6 +70,7 @@ export default function MoreScreen() {
 
         <Text style={[styles.sectionLabel, { color: colors.text3 }]}>Operations</Text>
         <View style={[styles.section, { borderTopColor: colors.border, borderBottomColor: colors.border }]}>
+          <MenuItem icon="receipt-outline" label="Bills" subtitle="View and filter all bills" onPress={() => router.push("/staff/bills")} />
           <MenuItem icon="people-outline" label="Khata / Ledger" subtitle="Customer dues and credit" onPress={() => router.push("/staff/khata")} />
           <MenuItem icon="cash-outline" label="Cash & Bank" subtitle="View till balance and bank deposits" onPress={() => router.push("/staff/cash" as any)} />
           <MenuItem icon="document-text-outline" label="Quotations" subtitle="Manage quotes and estimates" onPress={() => router.push("/staff/quotations")} />
@@ -98,6 +99,12 @@ export default function MoreScreen() {
 
         <Text style={[styles.sectionLabel, { color: colors.text3 }]}>Settings</Text>
         <View style={[styles.section, { borderTopColor: colors.border, borderBottomColor: colors.border }]}>
+          <MenuItem 
+            icon="settings-outline" 
+            label="Invoice Settings" 
+            subtitle="Shop details and format"
+            onPress={() => router.push("/staff/invoice-settings" as any)} 
+          />
           <MenuItem 
             icon={theme === "light" ? "moon-outline" : "sunny-outline"} 
             label={theme === "light" ? "Switch to Dark Theme" : "Switch to Light Theme"} 

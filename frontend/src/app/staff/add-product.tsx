@@ -267,7 +267,7 @@ export default function AddProductScreen() {
           <View style={styles.fieldGroup}>
             <Label text="Available colors" />
             <View style={styles.wrapRow}>
-              {COLOR_OPTIONS.map((c) => {
+              {Array.from(new Set([...COLOR_OPTIONS, ...availableColors])).map((c) => {
                 const active = availableColors.includes(c);
                 return (
                   <Pressable key={c} style={[styles.catChip, { backgroundColor: active ? colors.primary : colors.bg3, borderColor: active ? colors.primary : colors.border2 }]} onPress={() => toggleColor(c)}>

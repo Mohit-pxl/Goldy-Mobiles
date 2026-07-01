@@ -6,6 +6,8 @@ const {
   createCustomer,
   getCustomer,
   addPayment,
+  updateCustomer,
+  deleteCustomer,
 } = require('../controllers/customer.controller');
 
 // All customer/khata routes require staff/admin role
@@ -64,7 +66,13 @@ router.post('/', createCustomer);
 // GET /api/customers/:id — Get customer
 router.get('/:id', getCustomer);
 
+// PATCH /api/customers/:id — Update customer
+router.patch('/:id', updateCustomer);
+
 // POST /api/customers/:id/payments — Add Khata payment
 router.post('/:id/payments', addPayment);
+
+// DELETE /api/customers/:id — Delete customer
+router.delete('/:id', deleteCustomer);
 
 module.exports = router;
