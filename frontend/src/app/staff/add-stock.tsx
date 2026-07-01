@@ -9,6 +9,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { apiGet, apiPost, Product } from "@/services/api";
 import { consumeScanResult } from "@/utils/scanStore";
+import { useQuery } from "@tanstack/react-query";
+
+const FILTERS = ["All", "Mobiles", "Audio", "Smart Watches", "⚠ Low stock"];
 
 type StockLine = { code: string; color?: string };
 
@@ -29,19 +32,38 @@ export default function AddStockScreen() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [stockType, setStockType] = useState<"in" | "out" | null>(null);
   const [productSearch, setProductSearch] = useState("");
-  const [products, setProducts] = useState<Product[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [activeFilter, setActiveFilter] = useState("All");
   const [manualCode, setManualCode] = useState("");
   const [qty, setQty] = useState("");
   const [note, setNote] = useState("");
   const [lines, setLines] = useState<StockLine[]>([]);
   const [saving, setSaving] = useState(false);
   const [codeError, setCodeError] = useState("");
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [customColors, setCustomColors] = useState<string[]>([]);
+
+  const { data: allProducts, isLoading: searching } = useQuery({
+    queryKey: ["add-stock-products", activeFilter],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set("limit", "1000");
+      if (activeFilter === "⚠ Low stock") params.set("lowStock", "true");
+      else if (activeFilter !== "All") params.set("category", activeFilter);
+      const res = await apiGet<Product[]>(`/products?${params}`);
+      return res.data || [];
+    },
+    enabled: !selectedProduct,
+  });
+
+  const products = (allProducts || []).filter(
+    (p) => !productSearch || (p.name || "").toLowerCase().includes(productSearch.toLowerCase()) || (p.brand || "").toLowerCase().includes(productSearch.toLowerCase())
+  );
 
   const trackingType = selectedProduct?.trackingType || (selectedProduct?.trackImei ? "IMEI" : selectedProduct?.trackSerial ? "SERIAL" : "QUANTITY");
   const isTracked = trackingType === "IMEI" || trackingType === "SERIAL";
-  const colorOptions = useMemo(() => selectedProduct?.availableColors?.length ? selectedProduct.availableColors : ["Black", "White", "Blue", "Gold"], [selectedProduct]);
+  const colorOptions = useMemo(() => {
+    const base = selectedProduct?.availableColors?.length ? selectedProduct.availableColors : ["Black", "White", "Blue", "Gold"];
+    return Array.from(new Set([...base, ...customColors]));
+  }, [selectedProduct, customColors]);
 
   useEffect(() => {
     if (!productId) return;
@@ -63,29 +85,12 @@ export default function AddStockScreen() {
 
   const handleProductSearch = (q: string) => {
     setProductSearch(q);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    if (!q.trim()) {
-      setProducts([]);
-      return;
-    }
-    timerRef.current = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const res = await apiGet<Product[]>(`/products?search=${encodeURIComponent(q)}&limit=8`);
-        setProducts(res.data || []);
-      } catch {
-        setProducts([]);
-      } finally {
-        setSearching(false);
-      }
-    }, 250);
   };
 
   const selectProduct = (product: Product) => {
     setSelectedProduct(product);
     setStockType(null);
     setProductSearch("");
-    setProducts([]);
     setLines([]);
     setQty("");
     Haptics.selectionAsync();
@@ -98,7 +103,10 @@ export default function AddStockScreen() {
       setCodeError("Already exists");
       return;
     }
-    setLines((prev) => [...prev, { code, color: colorOptions[0] }]);
+    setLines((prev) => {
+      const prevColor = prev.length > 0 ? prev[prev.length - 1].color : colorOptions[0];
+      return [...prev, { code, color: prevColor }];
+    });
     setManualCode("");
     setCodeError("");
   };
@@ -181,17 +189,31 @@ export default function AddStockScreen() {
                 value={productSearch}
                 onChangeText={handleProductSearch}
               />
-              {searching && <ActivityIndicator size="small" color={colors.primary} />}
             </View>
-            {products.map((product) => (
-              <Pressable key={product._id} style={[styles.resultRow, { borderColor: colors.border, backgroundColor: colors.bg2 }]} onPress={() => selectProduct(product)}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.productName, { color: colors.foreground }]}>{product.name}</Text>
-                  <Text style={[styles.productMeta, { color: colors.text3 }]}>{product.brand} · Stock {product.stock} · {trackingLabel(product)}</Text>
-                </View>
-                <Ionicons name="add-circle" size={22} color={colors.primary} />
-              </Pressable>
-            ))}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }} style={{ paddingVertical: 4 }}>
+              {FILTERS.map((f) => (
+                <Pressable
+                  key={f}
+                  style={[styles.filterChip, { backgroundColor: activeFilter === f ? colors.primary : colors.bg3, borderColor: activeFilter === f ? colors.primary : colors.border2 }]}
+                  onPress={() => setActiveFilter(f)}
+                >
+                  <Text style={[styles.filterText, { color: activeFilter === f ? "#000" : colors.text2 }]}>{f}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            {searching ? (
+              <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 20 }} />
+            ) : (
+              products.map((product) => (
+                <Pressable key={product._id} style={[styles.resultRow, { borderColor: colors.border, backgroundColor: colors.bg2 }]} onPress={() => selectProduct(product)}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.productName, { color: colors.foreground }]}>{product.name}</Text>
+                    <Text style={[styles.productMeta, { color: colors.text3 }]}>{product.brand} · Stock {product.stock} · {trackingLabel(product)}</Text>
+                  </View>
+                  <Ionicons name="add-circle" size={22} color={colors.primary} />
+                </Pressable>
+              ))
+            )}
           </>
         )}
 
@@ -265,6 +287,19 @@ export default function AddStockScreen() {
                             </Pressable>
                           );
                         })}
+                        <TextInput
+                          style={[styles.input, { flex: 1, minWidth: 100, paddingVertical: 4, paddingHorizontal: 8, fontSize: 11, color: colors.foreground, backgroundColor: colors.bg3, borderColor: colors.border }]}
+                          placeholder="Custom color..."
+                          placeholderTextColor={colors.text3}
+                          onSubmitEditing={(e) => {
+                            const c = e.nativeEvent.text.trim();
+                            if (c) {
+                              setCustomColors((prev) => Array.from(new Set([...prev, c])));
+                              updateColor(line.code, c);
+                            }
+                            (e.currentTarget as any).clear();
+                          }}
+                        />
                       </View>
                     )}
                   </View>
@@ -322,4 +357,6 @@ const styles = StyleSheet.create({
   codeText: { flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" },
   colorRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   colorChip: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6 },
+  filterChip: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6 },
+  filterText: { fontSize: 12, fontFamily: "Inter_500Medium" },
 });

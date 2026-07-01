@@ -92,19 +92,21 @@ export default function BillsScreen() {
       </View>
 
       <View style={[styles.filterRow, { borderBottomColor: colors.border }]}>
-        {(["Date", "Week", "Month", "Year"] as FilterType[]).map((f) => (
-          <Pressable
-            key={f}
-            style={[
-              styles.filterChip,
-              { borderColor: colors.border2 },
-              activeFilter === f && !customDate && { backgroundColor: colors.primary, borderColor: colors.primary }
-            ]}
-            onPress={() => { setActiveFilter(f); setCustomDate(""); }}
-          >
-            <Text style={[styles.filterText, { color: colors.text2 }, activeFilter === f && !customDate && { color: "#000", fontFamily: "Inter_600SemiBold" }]}>{f}</Text>
-          </Pressable>
-        ))}
+        {(["Date", "Week", "Month", "Year"] as FilterType[]).map((f) => {
+          const isActive = activeFilter === f && !customDate;
+          return (
+            <Pressable
+              key={f}
+              style={[
+                styles.filterChip,
+                { backgroundColor: isActive ? colors.primary : colors.bg3, borderColor: isActive ? colors.primary : colors.border2 }
+              ]}
+              onPress={() => { setActiveFilter(f); setCustomDate(""); }}
+            >
+              <Text style={[styles.filterText, { color: isActive ? "#000" : colors.text2 }]}>{f}</Text>
+            </Pressable>
+          );
+        })}
       </View>
       
       {customDate ? (
@@ -206,9 +208,9 @@ const styles = StyleSheet.create({
   iconBtn: { padding: 4 },
   title: { fontSize: 18, fontWeight: "700", fontFamily: "Inter_700Bold" },
   sub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
-  filterRow: { flexDirection: "row", gap: 8, padding: 12, borderBottomWidth: 1 },
-  filterChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, borderWidth: 1 },
-  filterText: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  filterRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1 },
+  filterChip: { flex: 1, borderWidth: 1, borderRadius: 8, paddingVertical: 7, alignItems: "center" },
+  filterText: { fontSize: 12, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
   customDatePill: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginHorizontal: 16, marginTop: 12, padding: 10, borderWidth: 1, borderRadius: 8 },
   invRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, gap: 12 },
   iconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },

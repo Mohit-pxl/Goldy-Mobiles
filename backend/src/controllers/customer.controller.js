@@ -17,7 +17,6 @@ const listCustomers = async (req, res, next) => {
     const { search } = req.query;
 
     const filter = {};
-    const userFilter = { role: 'customer' };
 
     if (search) {
       const searchRegex = { $regex: search, $options: 'i' };
@@ -25,31 +24,19 @@ const listCustomers = async (req, res, next) => {
         { name: searchRegex },
         { phone: searchRegex },
       ];
-      userFilter.$or = [
-        { name: searchRegex },
-        { phone: searchRegex },
-      ];
     }
 
     if (req.query.count === 'true') {
-      const [customerCount, userCount] = await Promise.all([
-        Customer.countDocuments(filter),
-        User.countDocuments(userFilter),
-      ]);
-      return successResponse(res, { count: customerCount + userCount });
+      const customerCount = await Customer.countDocuments(filter);
+      return successResponse(res, { count: customerCount });
     }
 
-    const [customers, users, totalCustomers, totalUsers] = await Promise.all([
-      Customer.find(filter).sort({ createdAt: -1 }),
-      User.find(userFilter).sort({ createdAt: -1 }),
+    const [customers, totalCustomers] = await Promise.all([
+      Customer.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
       Customer.countDocuments(filter),
-      User.countDocuments(userFilter),
     ]);
 
-    const combined = [...customers, ...users].sort((a, b) => b.createdAt - a.createdAt);
-    const paginatedResult = combined.slice(skip, skip + limit);
-
-    return successResponse(res, paginatedResult, 200, buildMeta(totalCustomers + totalUsers));
+    return successResponse(res, customers, 200, buildMeta(totalCustomers));
   } catch (error) {
     next(error);
   }

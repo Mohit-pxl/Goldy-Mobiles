@@ -63,10 +63,10 @@ export default function BillingScreen() {
   };
 
   const { data: recentInvoices = [] } = useQuery<Invoice[]>({
-    queryKey: ["invoices"],
+    queryKey: ["invoices", "recent"],
     queryFn: async () => {
-      const res = await apiGet<Invoice[]>("/billing/invoices");
-      return (res.data || []).slice(-5).reverse();
+      const res = await apiGet<Invoice[]>("/billing/invoices?limit=5");
+      return res.data || [];
     },
   });
 

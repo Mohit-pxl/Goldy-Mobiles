@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
   customerPhone: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   dueBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
   dueLabel: { fontSize: 12, fontWeight: "700", fontFamily: "Inter_700Bold" },
-  actionRow: { padding: 14, borderBottomWidth: 1, borderBottomColor: "rgba(0,0,0,0.05)" },
+  actionRow: { flexDirection: "row", gap: 12, padding: 14, borderBottomWidth: 1, borderBottomColor: "rgba(0,0,0,0.05)" },
   payBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, borderRadius: 10 },
   payBtnText: { color: "#000", fontWeight: "700", fontFamily: "Inter_700Bold", fontSize: 13 },
   sectionLabel: { fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6, fontFamily: "Inter_500Medium", paddingBottom: 8 },

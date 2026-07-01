@@ -144,6 +144,10 @@ export interface Invoice {
   gstAmount: number;
   total: number;
   paymentMode: "cash" | "upi" | "card" | "credit";
+  paymentStatus: "paid" | "unpaid";
+  paidAmount: number;
+  dueAmount: number;
+  dueDate?: string;
   createdAt: string;
   staff?: { name: string };
 }

@@ -248,21 +248,17 @@ const updateProduct = [
 
 /**
  * DELETE /api/products/:id
- * Soft-delete a product (set isActive to false).
+ * Hard-delete a product from the database.
  */
 const deleteProduct = async (req, res, next) => {
   try {
-    const product = await Product.findByIdAndUpdate(
-      req.params.id,
-      { isActive: false },
-      { new: true }
-    );
+    const product = await Product.findByIdAndDelete(req.params.id);
 
     if (!product) {
       return errorResponse(res, 'Product not found.', 404);
     }
 
-    return successResponse(res, { message: 'Product deactivated successfully.' });
+    return successResponse(res, { message: 'Product deleted successfully.' });
   } catch (error) {
     next(error);
   }
