@@ -17,6 +17,7 @@ const listCustomers = async (req, res, next) => {
     const { search } = req.query;
 
     const filter = {};
+    const userFilter = {};
 
     if (search) {
       const searchRegex = { $regex: search, $options: 'i' };
@@ -24,19 +25,50 @@ const listCustomers = async (req, res, next) => {
         { name: searchRegex },
         { phone: searchRegex },
       ];
+      userFilter.$or = [
+        { name: searchRegex },
+        { phone: searchRegex },
+      ];
     }
 
     if (req.query.count === 'true') {
       const customerCount = await Customer.countDocuments(filter);
-      return successResponse(res, { count: customerCount });
+      const userCount = await User.countDocuments(userFilter);
+      return successResponse(res, { count: customerCount + userCount });
     }
 
-    const [customers, totalCustomers] = await Promise.all([
-      Customer.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
-      Customer.countDocuments(filter),
+    const [customers, users] = await Promise.all([
+      Customer.find(filter).sort({ createdAt: -1 }).lean(),
+      User.find(userFilter).sort({ createdAt: -1 }).lean(),
     ]);
 
-    return successResponse(res, customers, 200, buildMeta(totalCustomers));
+    // Format users to look like customers (remove sensitive info)
+    const formattedUsers = users.map(u => ({
+      _id: u._id,
+      name: u.name,
+      phone: u.phone,
+      email: u.email,
+      totalDue: u.totalDue || 0,
+      nextPaymentDate: u.nextPaymentDate,
+      createdAt: u.createdAt,
+      isUser: true, // flag to identify if needed
+    }));
+
+    // Merge and remove duplicates by phone if any
+    const all = [...customers, ...formattedUsers].sort((a, b) => b.createdAt - a.createdAt);
+    
+    // De-duplicate by phone number
+    const unique = [];
+    const seenPhones = new Set();
+    for (const item of all) {
+      if (item.phone && seenPhones.has(item.phone)) continue;
+      if (item.phone) seenPhones.add(item.phone);
+      unique.push(item);
+    }
+
+    const paginated = unique.slice(skip, skip + limit);
+
+    return successResponse(res, paginated, 200, buildMeta(unique.length));
   } catch (error) {
     next(error);
   }

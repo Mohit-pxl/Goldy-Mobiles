@@ -139,6 +139,8 @@ export interface Invoice {
   _id: string;
   invoiceNumber: string;
   customer?: Customer;
+  customerName?: string;
+  customerPhone?: string;
   items: InvoiceItem[];
   subtotal: number;
   gstAmount: number;
@@ -147,6 +149,7 @@ export interface Invoice {
   paymentStatus: "paid" | "unpaid";
   paidAmount: number;
   dueAmount: number;
+  discount?: number;
   dueDate?: string;
   createdAt: string;
   staff?: { name: string };

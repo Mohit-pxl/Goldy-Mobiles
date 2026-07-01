@@ -137,7 +137,7 @@ export default function BillsScreen() {
             </View>
             <View style={styles.invLeft}>
               <Text style={[styles.invNum, { color: colors.foreground }]}>{invoice.invoiceNumber}</Text>
-              <Text style={[styles.invDate, { color: colors.text3 }]}>{fmtDate(invoice.createdAt)} · {invoice.customer?.name || "Walk-in"}</Text>
+              <Text style={[styles.invDate, { color: colors.text3 }]}>{fmtDate(invoice.createdAt)} · {invoice.customer?.name || invoice.customerName || "Walk-in"}</Text>
             </View>
             <View style={styles.invRight}>
               <Text style={[styles.invTotal, { color: colors.foreground }]}>

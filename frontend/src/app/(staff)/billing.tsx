@@ -14,6 +14,7 @@ import {
   Platform,
   Modal,
 } from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import CustomerPicker from "@/components/CustomerPicker";
@@ -52,9 +53,10 @@ export default function BillingScreen() {
 
   // Unpaid Modal State
   const [showUnpaidModal, setShowUnpaidModal] = useState(false);
-  const [unpaidDueDate, setUnpaidDueDate] = useState<string>(""); // YYYY-MM-DD
-  const [unpaidDeposit, setUnpaidDeposit] = useState<string>("");
-  const [unpaidPaymentMode, setUnpaidPaymentMode] = useState<PaymentMode>("cash");
+  const [unpaidDueDate, setUnpaidDueDate] = useState<Date>(new Date(new Date().setDate(new Date().getDate() + 7)));
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [unpaidDeposit, setUnpaidDeposit] = useState("");
+  const [unpaidPaymentMode, setUnpaidPaymentMode] = useState<string>("cash");
 
   const getFutureDate = (days: number) => {
     const d = new Date();
@@ -153,7 +155,7 @@ export default function BillingScreen() {
     
     if (paymentStatus === "unpaid" && !showUnpaidModal) {
       // First show the modal to get details
-      setUnpaidDueDate(getFutureDate(7));
+      setUnpaidDueDate(new Date(new Date().setDate(new Date().getDate() + 7)));
       setUnpaidDeposit("");
       setShowUnpaidModal(true);
       return;
@@ -190,7 +192,7 @@ export default function BillingScreen() {
           paymentMode: paymentStatus === "unpaid" ? unpaidPaymentMode : paymentMode,
           paymentStatus,
           ...(paymentStatus === "unpaid" && unpaidDeposit ? { depositAmount: parseFloat(unpaidDeposit) } : {}),
-          ...(paymentStatus === "unpaid" && unpaidDueDate ? { dueDate: new Date(unpaidDueDate).toISOString() } : {}),
+          ...(paymentStatus === "unpaid" && unpaidDueDate ? { dueDate: unpaidDueDate.toISOString() } : {}),
           ...(customer ? { customerId: customer._id } : {}),
         });
         clearCart();
@@ -605,21 +607,48 @@ export default function BillingScreen() {
 
             <View style={{ marginTop: 16, gap: 16 }}>
               <View>
-                <Text style={[styles.sectionLabel, { color: colors.text3, paddingHorizontal: 0 }]}>Due Date (YYYY-MM-DD)</Text>
-                <View style={[styles.searchBox, { backgroundColor: colors.bg4, marginTop: 8 }]}>
-                  <TextInput
-                    style={[styles.searchInput, { color: colors.foreground }]}
-                    value={unpaidDueDate}
-                    onChangeText={setUnpaidDueDate}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor={colors.text3}
-                  />
-                </View>
+                <Text style={[styles.sectionLabel, { color: colors.text3, paddingHorizontal: 0 }]}>Due Date</Text>
+                
+                {Platform.OS === 'ios' ? (
+                  <View style={{ marginTop: 8 }}>
+                    <DateTimePicker
+                      value={unpaidDueDate}
+                      mode="date"
+                      display="default"
+                      onChange={(event, selectedDate) => {
+                        if (selectedDate) setUnpaidDueDate(selectedDate);
+                      }}
+                    />
+                  </View>
+                ) : (
+                  <>
+                    <Pressable
+                      style={[styles.searchBox, { backgroundColor: colors.bg4, marginTop: 8, justifyContent: 'center' }]}
+                      onPress={() => setShowDatePicker(true)}
+                    >
+                      <Text style={{ color: colors.foreground }}>
+                        {unpaidDueDate.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                      </Text>
+                    </Pressable>
+                    {showDatePicker && (
+                      <DateTimePicker
+                        value={unpaidDueDate}
+                        mode="date"
+                        display="default"
+                        onChange={(event, selectedDate) => {
+                          setShowDatePicker(false);
+                          if (selectedDate) setUnpaidDueDate(selectedDate);
+                        }}
+                      />
+                    )}
+                  </>
+                )}
+                
                 <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
-                  <Pressable style={[styles.quickDateBtn, { borderColor: colors.border2 }]} onPress={() => setUnpaidDueDate(getFutureDate(7))}>
+                  <Pressable style={[styles.quickDateBtn, { borderColor: colors.border2 }]} onPress={() => setUnpaidDueDate(new Date(new Date().setDate(new Date().getDate() + 7)))}>
                     <Text style={{ color: colors.text2, fontSize: 12 }}>1 Week</Text>
                   </Pressable>
-                  <Pressable style={[styles.quickDateBtn, { borderColor: colors.border2 }]} onPress={() => setUnpaidDueDate(getFutureDate(30))}>
+                  <Pressable style={[styles.quickDateBtn, { borderColor: colors.border2 }]} onPress={() => setUnpaidDueDate(new Date(new Date().setDate(new Date().getDate() + 30)))}>
                     <Text style={{ color: colors.text2, fontSize: 12 }}>1 Month</Text>
                   </Pressable>
                 </View>

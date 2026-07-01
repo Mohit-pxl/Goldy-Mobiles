@@ -100,6 +100,12 @@ export default function MoreScreen() {
         <Text style={[styles.sectionLabel, { color: colors.text3 }]}>Settings</Text>
         <View style={[styles.section, { borderTopColor: colors.border, borderBottomColor: colors.border }]}>
           <MenuItem 
+            icon="settings-outline" 
+            label="Invoice Settings" 
+            subtitle="Shop details and format"
+            onPress={() => router.push("/staff/invoice-settings" as any)} 
+          />
+          <MenuItem 
             icon={theme === "light" ? "moon-outline" : "sunny-outline"} 
             label={theme === "light" ? "Switch to Dark Theme" : "Switch to Light Theme"} 
             subtitle="Change app appearance"

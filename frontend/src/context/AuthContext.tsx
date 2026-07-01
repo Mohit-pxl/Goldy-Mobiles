@@ -16,14 +16,13 @@ interface AuthContextType {
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   enterGuestMode: () => void;
-  devLogin: (role: "admin" | "staff" | "customer") => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isGuest, setIsGuest] = useState(false);
+  const [isGuest, setIsGuest] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const { resetTheme } = useTheme();
 
@@ -74,25 +73,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsGuest(true);
   }, []);
 
-  const devLogin = useCallback(async (role: "admin" | "staff" | "customer") => {
-    const mockUser: User = {
-      _id: `dev-${role}`,
-      name: role === "admin" ? "Dev Admin" : role === "staff" ? "Dev Staff" : "Dev Customer",
-      email: `dev-${role}@goldymobiles.local`,
-      role,
-      permissions: {
-        canViewCostPrice: role !== "customer",
-        canEditPrice: role === "admin",
-        canViewReports: role !== "customer",
-        canManageStaff: role === "admin",
-      },
-    };
-    await AsyncStorage.setItem("auth_token", `dev-token-${role}`);
-    await AsyncStorage.setItem("auth_user", JSON.stringify(mockUser));
-    setIsGuest(false);
-    setUser(mockUser);
-  }, []);
-
   const logout = useCallback(async () => {
     await AsyncStorage.multiRemove(["auth_token", "auth_user"]);
     setUser(null);
@@ -107,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isGuest, isLoading, sendOtp, verifyOtp, login, register, logout, refreshUser, enterGuestMode, devLogin }}>
+    <AuthContext.Provider value={{ user, isGuest, isLoading, sendOtp, verifyOtp, login, register, logout, refreshUser, enterGuestMode }}>
       {children}
     </AuthContext.Provider>
   );
